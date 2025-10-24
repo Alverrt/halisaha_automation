@@ -72,17 +72,58 @@ class ReservationService {
     return reservations;
   }
 
-  async cancelReservation(reservationId: number): Promise<void> {
+  async findReservationsByCustomerName(customerName: string): Promise<ReservationDetails[]> {
+    // Search for active reservations by customer name (case-insensitive, partial match)
+    const query = `
+      SELECT r.*, c.name as customer_name, c.phone_number
+      FROM reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE LOWER(c.name) LIKE LOWER($1)
+      AND r.status = 'active'
+      AND r.start_time >= NOW()
+      ORDER BY r.start_time
+    `;
+
+    const result = await db.query(query, [`%${customerName}%`]);
+    return result.rows;
+  }
+
+  async cancelReservation(reservationId: number): Promise<ReservationDetails> {
     const reservation = await db.getReservationById(reservationId);
 
     if (!reservation) {
-      throw new Error('Reservation not found');
+      throw new Error('Rezervasyon bulunamadı');
+    }
+
+    if (reservation.status === 'cancelled') {
+      throw new Error('Bu rezervasyon zaten iptal edilmiş');
     }
 
     await db.cancelReservation(reservationId);
 
     // Invalidate cache
     await this.invalidateWeekCache(new Date(reservation.start_time));
+
+    return reservation;
+  }
+
+  async checkDuplicateReservation(
+    customerPhone: string,
+    startTime: Date,
+    endTime: Date
+  ): Promise<boolean> {
+    // Check if customer already has a reservation at the same time
+    const query = `
+      SELECT COUNT(*) as count
+      FROM reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE c.phone_number = $1
+      AND r.status = 'active'
+      AND tsrange($2::timestamp, $3::timestamp) && tsrange(r.start_time, r.end_time)
+    `;
+
+    const result = await db.query(query, [customerPhone, startTime, endTime]);
+    return parseInt(result.rows[0].count) > 0;
   }
 
   private getWeekRange(weekOffset: number = 0): { startDate: Date; endDate: Date } {
