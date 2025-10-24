@@ -24,7 +24,7 @@ export class FieldAgent {
           properties: {
             customer_name: { type: 'string', description: 'Müşteri adı' },
             customer_phone: { type: 'string', description: 'Müşteri telefon numarası' },
-            time_slot: { type: 'string', description: 'Saat aralığı (örn: 9-10, 14-15)' },
+            time_slot: { type: 'string', description: 'Saat aralığı. ÖNEMLI: Eğer kullanıcı "sabah" derse "sabah 9-10" yaz, yoksa sadece "9-10" yaz. Örnekler: "9-10", "sabah 9-10", "14-15"' },
             week_offset: { type: 'number', description: 'Hafta offset (0: bu hafta, 1: gelecek hafta, -1: geçen hafta)' },
             day_of_week: { type: 'string', description: 'Haftanın günü (pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar)' },
             price: { type: 'number', description: 'Rezervasyon fiyatı (opsiyonel)' },
@@ -141,7 +141,7 @@ export class FieldAgent {
           type: 'object',
           properties: {
             reservation_id: { type: 'number', description: 'Güncellenecek rezervasyonun ID\'si' },
-            time_slot: { type: 'string', description: 'Yeni saat aralığı (örn: 14-15) - opsiyonel' },
+            time_slot: { type: 'string', description: 'Yeni saat aralığı. ÖNEMLI: Eğer kullanıcı "sabah" derse "sabah 9-10" yaz, yoksa sadece "9-10" yaz - opsiyonel' },
             week_offset: { type: 'number', description: 'Yeni hafta offset - opsiyonel' },
             day_of_week: { type: 'string', description: 'Yeni haftanın günü - opsiyonel' },
             price: { type: 'number', description: 'Yeni fiyat - opsiyonel' }
@@ -217,6 +217,16 @@ REZERVASYON DÜZENLEME AKIŞI:
 
 KURALLAR:
 - Saat formatı: "9-10", "14-15", "18-19" gibi
+- ÇOK ÖNEMLİ - SAAT KURALI:
+  * Halı saha maçları genelde akşam oynanır
+  * Kullanıcı "9-10" derse bu AKŞAM 21:00-22:00 demektir (otomatik +12 saat eklenir)
+  * Kullanıcı "sabah 9-10" derse bu SABAH 09:00-10:00 demektir
+  * Eğer kullanıcı "sabah" kelimesini kullandıysa time_slot parametresine "sabah 9-10" şeklinde yaz
+  * Kullanıcı sabah dememişse sadece "9-10" yaz, sistem otomatik akşam saatine çevirecek
+  * Örnekler:
+    - "9-10'a rezervasyon yap" → time_slot: "9-10" (sistem bunu 21:00-22:00 yapar)
+    - "sabah 9-10'a rezervasyon yap" → time_slot: "sabah 9-10" (sistem bunu 09:00-10:00 yapar)
+    - "14-15'e rezervasyon yap" → time_slot: "14-15" (14:00-15:00 olarak kalır)
 - Haftanın günü: pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar
 - "Bu hafta" = week_offset: 0, "Gelecek hafta" = week_offset: 1
 

@@ -258,15 +258,38 @@ class ReservationService {
   }
 
   parseTimeSlot(hour: string): { startHour: number; endHour: number } {
-    // Parse formats like "9-10", "14-15", "18:00-19:00"
+    // Check if it's explicitly marked as morning
+    const isMorning = /sabah|morning|am/i.test(hour);
+
+    // Parse formats like "9-10", "14-15", "18:00-19:00", "sabah 9-10"
     const match = hour.match(/(\d+)(?::00)?-(\d+)(?::00)?/);
     if (!match) {
       throw new Error('Invalid time format');
     }
 
+    let startHour = parseInt(match[1]);
+    let endHour = parseInt(match[2]);
+
+    // Default behavior: if hour is 6-11, it's already correct (morning or evening edge cases)
+    // If hour is 1-5 without "sabah" keyword, treat as early morning (01:00-05:00)
+    // If hour is 12-23, use as-is
+    // Otherwise, if hour is 6-11 and no "sabah" keyword, convert to PM (add 12)
+
+    if (!isMorning) {
+      // Convert to PM (evening) if hour is between 6-11
+      if (startHour >= 6 && startHour <= 11) {
+        startHour += 12;
+      }
+      if (endHour >= 6 && endHour <= 11) {
+        endHour += 12;
+      }
+      // Hours 1-5 without "sabah" are treated as early morning (past midnight)
+      // Hours 12-23 stay as-is
+    }
+
     return {
-      startHour: parseInt(match[1]),
-      endHour: parseInt(match[2]),
+      startHour,
+      endHour,
     };
   }
 
