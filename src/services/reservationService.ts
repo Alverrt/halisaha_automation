@@ -74,14 +74,14 @@ class ReservationService {
 
   async findReservationsByCustomerName(customerName: string): Promise<ReservationDetails[]> {
     // Search for active reservations by customer name (case-insensitive, partial match)
+    // Include all active reservations (past and future) to allow finding any active reservation
     const query = `
       SELECT r.*, c.name as customer_name, c.phone_number
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
       WHERE LOWER(c.name) LIKE LOWER($1)
       AND r.status = 'active'
-      AND r.start_time >= NOW()
-      ORDER BY r.start_time
+      ORDER BY r.start_time DESC
     `;
 
     const result = await db.query(query, [`%${customerName}%`]);
@@ -105,6 +105,28 @@ class ReservationService {
     await this.invalidateWeekCache(new Date(reservation.start_time));
 
     return reservation;
+  }
+
+  async cancelAllWeekReservations(weekOffset: number = 0): Promise<{ cancelled: number; reservations: ReservationDetails[] }> {
+    // Get all active reservations for the week
+    const reservations = await this.getReservationsByWeek(weekOffset);
+
+    if (reservations.length === 0) {
+      return { cancelled: 0, reservations: [] };
+    }
+
+    // Cancel each reservation
+    const cancelledReservations: ReservationDetails[] = [];
+    for (const reservation of reservations) {
+      await db.cancelReservation(reservation.id);
+      cancelledReservations.push(reservation);
+    }
+
+    // Invalidate cache for the week
+    const weekStartDate = this.getWeekStartDate(weekOffset);
+    await this.invalidateWeekCache(weekStartDate);
+
+    return { cancelled: cancelledReservations.length, reservations: cancelledReservations };
   }
 
   async checkDuplicateReservation(

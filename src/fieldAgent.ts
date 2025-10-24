@@ -9,7 +9,7 @@ import { db } from './database/db';
 
 export class FieldAgent {
   private openai: OpenAI;
-  private conversationHistory: Map<string, { messages: ChatCompletionMessageParam[]; lastActivity: number }>;
+  private conversationHistory: Map<string, { messages: ChatCompletionMessageParam[]; lastActivity: number; totalTokens: number }>;
   private whatsappClient: WhatsAppClient;
   private readonly SESSION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
@@ -43,6 +43,20 @@ export class FieldAgent {
           type: 'object',
           properties: {
             week_offset: { type: 'number', description: 'Hafta offset (0: bu hafta, -1: geçen hafta, -2: 2 hafta önce)' }
+          },
+          required: ['week_offset']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'list_week_reservations',
+        description: 'Haftalık rezervasyonları numara ile liste halinde gösterir. Kullanıcı "liste halinde", "listele" derse bunu kullan.',
+        parameters: {
+          type: 'object',
+          properties: {
+            week_offset: { type: 'number', description: 'Hafta offset (0: bu hafta, -1: geçen hafta)' }
           },
           required: ['week_offset']
         }
@@ -119,6 +133,20 @@ export class FieldAgent {
     {
       type: 'function',
       function: {
+        name: 'cancel_all_week_reservations',
+        description: 'Belirtilen haftanın TÜM rezervasyonlarını iptal eder',
+        parameters: {
+          type: 'object',
+          properties: {
+            week_offset: { type: 'number', description: 'Hangi haftanın rezervasyonları iptal edilecek (0: bu hafta, 1: gelecek hafta)' }
+          },
+          required: ['week_offset']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'update_customer_info',
         description: 'Rezervasyonun müşteri bilgilerini (ad, soyad, telefon) günceller',
         parameters: {
@@ -186,9 +214,13 @@ export class FieldAgent {
 
 GÖREVLER:
 - Rezervasyon oluşturma, iptal, düzenleme işlemleri
-- Haftalık rezervasyon tablolarını gösterme (görsel olarak)
+- Haftalık rezervasyon tablolarını gösterme (görsel: show_week_table, liste: list_week_reservations)
 - Satış analizleri (günlük, haftalık, aylık saat satışı ve gelir)
 - Müşteri analizleri (en sadık müşteriler, en çok iptal yapanlar)
+
+TABLO vs LİSTE:
+- Kullanıcı "tablo göster" derse → show_week_table (görsel)
+- Kullanıcı "liste halinde göster", "listele" derse → list_week_reservations (metin listesi ID'ler ile)
 
 ÖNEMLİ KURALLAR:
 - Kullanıcı TEK MESAJDA ÇOKLU İŞLEM yapabilir (oluştur, iptal, düzenle karışık)
@@ -259,6 +291,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
             },
           ],
           lastActivity: now,
+          totalTokens: 0,
         };
         this.conversationHistory.set(userId, session);
       }
@@ -271,18 +304,21 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
       });
 
       let response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: config.openai.model,
         messages: session.messages,
         tools: this.tools,
         tool_choice: 'auto',
-        max_tokens: 3000,
+        max_tokens: config.openai.maxTokens,
       });
 
       // Log token usage
+      let conversationTokens = 0;
       if (response.usage) {
+        conversationTokens += response.usage.total_tokens;
+        session.totalTokens += response.usage.total_tokens;
         await db.logTokenUsage(
           userId,
-          'gpt-4o-mini',
+          config.openai.model,
           'chat',
           response.usage.prompt_tokens,
           response.usage.completion_tokens,
@@ -318,18 +354,20 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
         }
 
         response = await this.openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+          model: config.openai.model,
           messages: session.messages,
           tools: this.tools,
           tool_choice: 'auto',
-          max_tokens: 3000,
+          max_tokens: config.openai.maxTokens,
         });
 
         // Log token usage for tool call iteration
         if (response.usage) {
+          conversationTokens += response.usage.total_tokens;
+          session.totalTokens += response.usage.total_tokens;
           await db.logTokenUsage(
             userId,
-            'gpt-4o-mini',
+            config.openai.model,
             'chat',
             response.usage.prompt_tokens,
             response.usage.completion_tokens,
@@ -354,7 +392,14 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
 
       this.conversationHistory.set(userId, session);
 
-      return assistantMessage.content || 'Üzgünüm, bir yanıt oluşturamadım.';
+      let finalResponse = assistantMessage.content || 'Üzgünüm, bir yanıt oluşturamadım.';
+
+      // Add token usage info in development
+      if (process.env.NODE_ENV !== 'production') {
+        finalResponse += `\n\n(Tokens: ${conversationTokens} this msg, ${session.totalTokens} total)`;
+      }
+
+      return finalResponse;
     } catch (error) {
       console.error('Error in Field Agent:', error);
       return 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.';
@@ -436,6 +481,35 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
           return `📊 Tablo gönderildi! ${reservations.length} rezervasyon bulundu.`;
         }
 
+        case 'list_week_reservations': {
+          const reservations = await reservationService.getReservationsByWeek(args.week_offset);
+
+          if (reservations.length === 0) {
+            return '❌ Bu hafta için rezervasyon bulunamadı.';
+          }
+
+          let message = `📋 Bu hafta ${reservations.length} rezervasyon var:\n\n`;
+
+          reservations.forEach((res, index) => {
+            const startTime = new Date(res.start_time);
+            const endTime = new Date(res.end_time);
+            const dayName = startTime.toLocaleDateString('tr-TR', { weekday: 'long' });
+
+            message += `${index + 1}. 🆔 ID: ${res.id}\n`;
+            message += `   👤 ${res.customer_name}\n`;
+            message += `   📞 ${res.phone_number}\n`;
+            message += `   📅 ${dayName}, ${startTime.toLocaleDateString('tr-TR')}\n`;
+            message += `   ⏰ ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
+            if (res.price) message += `   💰 ${res.price} TL\n`;
+            if (res.notes) message += `   📝 ${res.notes}\n`;
+            message += '\n';
+          });
+
+          message += `💡 Rezervasyon iptal etmek için: "X numaralı rezervasyonu iptal et"`;
+
+          return message;
+        }
+
         case 'get_sales_analytics': {
           let analytics;
           if (args.period === 'week') {
@@ -498,6 +572,23 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
             `📅 Tarih: ${startTime.toLocaleDateString('tr-TR')}\n` +
             `⏰ Saat: ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n` +
             `${reservation.price ? `💰 Fiyat: ${reservation.price} TL\n` : ''}`;
+        }
+
+        case 'cancel_all_week_reservations': {
+          const result = await reservationService.cancelAllWeekReservations(args.week_offset);
+
+          if (result.cancelled === 0) {
+            return '❌ Bu hafta için iptal edilecek rezervasyon bulunamadı.';
+          }
+
+          let message = `✅ ${result.cancelled} rezervasyon iptal edildi!\n\n`;
+
+          result.reservations.forEach((res, index) => {
+            const startTime = new Date(res.start_time);
+            message += `${index + 1}. ${res.customer_name} - ${startTime.toLocaleDateString('tr-TR')} ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
+          });
+
+          return message;
         }
 
         case 'update_customer_info': {
