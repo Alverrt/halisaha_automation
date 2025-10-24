@@ -156,40 +156,40 @@ class TableVisualizationService {
       ctx.fillStyle = '#27ae60';
       ctx.fillRect(x + 2, y + 2, this.CELL_WIDTH - 4, cellHeight - 4);
 
-      // Customer name
+      const centerX = x + this.CELL_WIDTH / 2;
+      let currentY = y + 8;
+
+      // Customer name (full name with surname)
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
-      const centerX = x + this.CELL_WIDTH / 2;
-      const centerY = y + 10;
+      const fullName = reservation.customer_name;
+      const nameParts = fullName.split(' ');
 
-      // Wrap text if too long
-      const maxWidth = this.CELL_WIDTH - 10;
-      const name = reservation.customer_name;
+      // Display name intelligently based on length
+      if (nameParts.length >= 2) {
+        // Has name and surname
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ');
 
-      if (ctx.measureText(name).width > maxWidth) {
-        const words = name.split(' ');
-        if (words.length > 1) {
-          ctx.fillText(words[0], centerX, centerY);
-          ctx.font = '12px sans-serif';
-          ctx.fillText(words.slice(1).join(' '), centerX, centerY + 16);
-        } else {
-          ctx.font = '12px sans-serif';
-          ctx.fillText(name.substring(0, 15) + '...', centerX, centerY);
-        }
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText(firstName, centerX, currentY);
+        currentY += 16;
+
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText(lastName, centerX, currentY);
+        currentY += 18;
       } else {
-        ctx.fillText(name, centerX, centerY);
+        // Single name only
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(fullName, centerX, currentY);
+        currentY += 18;
       }
 
-      // Phone number
-      ctx.font = '11px sans-serif';
-      ctx.fillText(
-        reservation.phone_number,
-        centerX,
-        centerY + (name.length > 15 ? 28 : 20)
-      );
+      // Phone number (more visible)
+      ctx.font = '12px sans-serif';
+      ctx.fillText(reservation.phone_number, centerX, currentY);
     });
   }
 
