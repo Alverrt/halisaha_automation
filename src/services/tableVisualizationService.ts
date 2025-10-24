@@ -9,7 +9,7 @@ interface TimeSlot {
 
 class TableVisualizationService {
   private readonly CELL_WIDTH = 130;
-  private readonly CELL_HEIGHT = 50;
+  private readonly CELL_HEIGHT = 55; // Increased from 50 to 55 for better content fit
   private readonly HEADER_HEIGHT = 70;
   private readonly TIME_COLUMN_WIDTH = 140;
   private readonly DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
@@ -159,7 +159,9 @@ class TableVisualizationService {
       ctx.fillRect(x + 2, y + 2, this.CELL_WIDTH - 4, cellHeight - 4);
 
       const centerX = x + this.CELL_WIDTH / 2;
-      let currentY = y + 8;
+      const cellPadding = 6;
+      const availableHeight = cellHeight - (cellPadding * 2);
+      let currentY = y + cellPadding;
 
       // Customer name (full name with surname)
       ctx.fillStyle = '#ffffff';
@@ -169,29 +171,35 @@ class TableVisualizationService {
       const fullName = reservation.customer_name;
       const nameParts = fullName.split(' ');
 
+      // Adjust font size based on available height
+      const lineHeight = hourSpan === 1 ? 13 : 15; // Smaller spacing for 1-hour slots
+      const fontSize = hourSpan === 1 ? 11 : 12;
+
       // Display name intelligently based on length
       if (nameParts.length >= 2) {
         // Has name and surname
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ');
 
-        ctx.font = `bold 13px ${this.FONT_FAMILY}`;
+        ctx.font = `bold ${fontSize}px ${this.FONT_FAMILY}`;
         ctx.fillText(firstName, centerX, currentY);
-        currentY += 16;
+        currentY += lineHeight;
 
-        ctx.font = `bold 13px ${this.FONT_FAMILY}`;
+        ctx.font = `bold ${fontSize}px ${this.FONT_FAMILY}`;
         ctx.fillText(lastName, centerX, currentY);
-        currentY += 18;
+        currentY += lineHeight;
       } else {
         // Single name only
-        ctx.font = `bold 14px ${this.FONT_FAMILY}`;
+        ctx.font = `bold ${fontSize + 1}px ${this.FONT_FAMILY}`;
         ctx.fillText(fullName, centerX, currentY);
-        currentY += 18;
+        currentY += lineHeight;
       }
 
-      // Phone number (more visible)
-      ctx.font = `12px ${this.FONT_FAMILY}`;
-      ctx.fillText(reservation.phone_number, centerX, currentY);
+      // Phone number (more visible) - only show if there's space
+      if (currentY + 12 <= y + cellHeight - cellPadding) {
+        ctx.font = `${fontSize}px ${this.FONT_FAMILY}`;
+        ctx.fillText(reservation.phone_number, centerX, currentY);
+      }
     });
   }
 
