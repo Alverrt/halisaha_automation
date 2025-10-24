@@ -8,12 +8,13 @@ interface TimeSlot {
 }
 
 class TableVisualizationService {
-  private readonly CELL_WIDTH = 120;
+  private readonly CELL_WIDTH = 130;
   private readonly CELL_HEIGHT = 50;
-  private readonly HEADER_HEIGHT = 60;
-  private readonly TIME_COLUMN_WIDTH = 100;
-  private readonly DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-  private readonly HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6:00 to 22:00
+  private readonly HEADER_HEIGHT = 70;
+  private readonly TIME_COLUMN_WIDTH = 140;
+  private readonly DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+  // 12:00 to 06:00 (next day) = 18 hours
+  private readonly HOURS = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6];
 
   async generateWeekTable(
     reservations: ReservationDetails[],
@@ -47,7 +48,7 @@ class TableVisualizationService {
     ctx.fillRect(0, 0, this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * 7, this.HEADER_HEIGHT);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 16px Arial';
+    ctx.font = 'bold 15px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -62,17 +63,19 @@ class TableVisualizationService {
       const month = date.getMonth() + 1;
 
       const x = this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * index + this.CELL_WIDTH / 2;
-      ctx.fillText(day, x, this.HEADER_HEIGHT / 2 - 10);
 
-      ctx.font = '12px Arial';
-      ctx.fillText(`${dayNum}/${month}`, x, this.HEADER_HEIGHT / 2 + 10);
-      ctx.font = 'bold 16px Arial';
+      // Use sans-serif for better Turkish character support
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText(day, x, this.HEADER_HEIGHT / 2 - 12);
+
+      ctx.font = '12px sans-serif';
+      ctx.fillText(`${dayNum}/${month}`, x, this.HEADER_HEIGHT / 2 + 12);
     });
   }
 
   private drawTimeColumn(ctx: any): void {
     ctx.fillStyle = '#34495e';
-    ctx.font = '14px Arial';
+    ctx.font = '13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -87,9 +90,10 @@ class TableVisualizationService {
       ctx.strokeStyle = '#bdc3c7';
       ctx.strokeRect(0, y, this.TIME_COLUMN_WIDTH, this.CELL_HEIGHT);
 
-      // Time text
+      // Time text with range format
       ctx.fillStyle = '#2c3e50';
-      const timeText = `${hour}:00`;
+      const nextHour = index < this.HOURS.length - 1 ? this.HOURS[index + 1] : (hour + 1) % 24;
+      const timeText = `${hour.toString().padStart(2, '0')}:00-${nextHour.toString().padStart(2, '0')}:00`;
       ctx.fillText(
         timeText,
         this.TIME_COLUMN_WIDTH / 2,
@@ -154,7 +158,7 @@ class TableVisualizationService {
 
       // Customer name
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px Arial';
+      ctx.font = 'bold 14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
@@ -169,10 +173,10 @@ class TableVisualizationService {
         const words = name.split(' ');
         if (words.length > 1) {
           ctx.fillText(words[0], centerX, centerY);
-          ctx.font = '12px Arial';
+          ctx.font = '12px sans-serif';
           ctx.fillText(words.slice(1).join(' '), centerX, centerY + 16);
         } else {
-          ctx.font = '12px Arial';
+          ctx.font = '12px sans-serif';
           ctx.fillText(name.substring(0, 15) + '...', centerX, centerY);
         }
       } else {
@@ -180,7 +184,7 @@ class TableVisualizationService {
       }
 
       // Phone number
-      ctx.font = '11px Arial';
+      ctx.font = '11px sans-serif';
       ctx.fillText(
         reservation.phone_number,
         centerX,
@@ -212,7 +216,7 @@ class TableVisualizationService {
 
     // Title
     ctx.fillStyle = '#2c3e50';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
