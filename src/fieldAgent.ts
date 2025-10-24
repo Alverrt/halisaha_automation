@@ -18,14 +18,14 @@ export class FieldAgent {
       type: 'function',
       function: {
         name: 'create_reservation',
-        description: 'Yeni bir rezervasyon oluşturur',
+        description: 'Yeni bir rezervasyon oluşturur. ZORUNLU: customer_name ve customer_phone. Soyisim opsiyonel, sadece isim yeterli.',
         parameters: {
           type: 'object',
           properties: {
-            customer_name: { type: 'string', description: 'Müşteri adı' },
-            customer_phone: { type: 'string', description: 'Müşteri telefon numarası' },
+            customer_name: { type: 'string', description: 'Müşteri adı (soyisim opsiyonel, sadece isim de olabilir)' },
+            customer_phone: { type: 'string', description: 'Müşteri telefon numarası (ZORUNLU - yoksa kullanıcıya sor)' },
             time_slot: { type: 'string', description: 'Saat aralığı. ÖNEMLI: Eğer kullanıcı "sabah" derse "sabah 9-10" yaz, yoksa sadece "9-10" yaz. Örnekler: "9-10", "sabah 9-10", "14-15"' },
-            week_offset: { type: 'number', description: 'Hafta offset (0: bu hafta, 1: gelecek hafta, -1: geçen hafta)' },
+            week_offset: { type: 'number', description: 'Hafta offset (0: bu hafta/bugün, 1: gelecek hafta/yarın, -1: geçen hafta/dün). "bugün"=0, "yarın"=0 (bugünün ertesi günü için day_of_week kullan)' },
             day_of_week: { type: 'string', description: 'Haftanın günü (pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar)' },
             price: { type: 'number', description: 'Rezervasyon fiyatı (opsiyonel)' },
             notes: { type: 'string', description: 'Ek notlar (opsiyonel)' }
@@ -191,10 +191,13 @@ GÖREVLER:
 - Müşteri analizleri (en sadık müşteriler, en çok iptal yapanlar)
 
 ÖNEMLİ KURALLAR:
-- İşlemleri doğrudan yap, onay alma
+- Kullanıcı TEK MESAJDA ÇOKLU REZERVASYON yapabilir. Örnek: "bugün 9-10'a Ahmet yaz, yarın 10-11'e Mehmet yaz"
+- Her rezervasyon için MUTLAKA TELEFON NUMARASI gerekli. İsim ve telefon yoksa kullanıcıya sor.
+- Soyisim opsiyoneldir. Sadece isim yeterli.
+- Telefon numarası eksikse: "X kişisi için telefon numarası nedir?" diye sor
+- Eksik bilgi tamamlanınca işlemi yap
 - Her zaman Türkçe konuş, profesyonel ama samimi ol
 - Tarih ve saat bilgilerini dikkatli parse et
-- Kullanıcıya işlem sonucunu net bir şekilde bildir
 
 REZERVASYON İPTAL AKIŞI:
 1. Kullanıcı "Ahmet Yılmaz için rezervasyonu iptal et" derse
@@ -203,9 +206,19 @@ REZERVASYON İPTAL AKIŞI:
 4. cancel_reservation ile iptal et
 5. Sonucu bildir
 
-REZERVASYON OLUŞTURMA AKIŞI:
-1. Kullanıcı bilgileri verdiğinde create_reservation çağır
-2. Sonucu bildir
+REZERVASYON OLUŞTURMA AKIŞI - ÇOK ÖNEMLİ:
+1. Kullanıcının mesajını analiz et, kaç rezervasyon istediğini belirle
+2. Her rezervasyon için isim ve telefon kontrolü yap
+3. Eksik telefon varsa kullanıcıya sor, işlemi DURDUR
+4. Tüm bilgiler tamsa create_reservation'ları sırayla çağır (tek mesajda birden fazla tool call yapabilirsin)
+5. Tüm sonuçları toplu bildir
+
+ÇOKLU REZERVASYON ÖRNEĞİ:
+Kullanıcı: "bugün 9-10'a Ahmet yaz, yarın 10-11'e Mehmet yaz"
+→ Telefon eksik, sor: "Ahmet ve Mehmet için telefon numaralarını verir misiniz?"
+Kullanıcı: "Ahmet 0532 111 22 33, Mehmet 0532 444 55 66"
+→ İki create_reservation çağrısı yap (aynı anda)
+→ "✅ 2 rezervasyon oluşturuldu: Ahmet (bugün 21:00-22:00), Mehmet (yarın 22:00-23:00)"
 
 REZERVASYON DÜZENLEME AKIŞI:
 1. Kullanıcı "Ahmet Yılmaz'ın telefon numarasını değiştir" derse
@@ -227,8 +240,14 @@ KURALLAR:
     - "9-10'a rezervasyon yap" → time_slot: "9-10" (sistem bunu 21:00-22:00 yapar)
     - "sabah 9-10'a rezervasyon yap" → time_slot: "sabah 9-10" (sistem bunu 09:00-10:00 yapar)
     - "14-15'e rezervasyon yap" → time_slot: "14-15" (14:00-15:00 olarak kalır)
-- Haftanın günü: pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar
-- "Bu hafta" = week_offset: 0, "Gelecek hafta" = week_offset: 1
+
+- TARİH KURALI:
+  * "bugün" veya "bu gün" → Bugünün haftanın hangi günü olduğunu hesapla, week_offset: 0, day_of_week: o gün
+  * "yarın" → Yarının haftanın hangi günü olduğunu hesapla, week_offset: 0, day_of_week: yarının günü
+  * "pazartesi", "salı" vs → week_offset: 0 (bu hafta), day_of_week: belirtilen gün
+  * "gelecek hafta pazartesi" → week_offset: 1, day_of_week: pazartesi
+
+- Haftanın günleri: pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar
 
 Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
             },
@@ -250,7 +269,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
         messages: session.messages,
         tools: this.tools,
         tool_choice: 'auto',
-        max_tokens: 1500,
+        max_tokens: 3000,
       });
 
       // Log token usage
@@ -269,7 +288,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
       let assistantMessage = response.choices[0].message;
       session.messages.push(assistantMessage);
 
-      const maxIterations = 3;
+      const maxIterations = 7;
       let iteration = 0;
 
       while (assistantMessage.tool_calls && iteration < maxIterations) {
@@ -297,7 +316,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
           messages: session.messages,
           tools: this.tools,
           tool_choice: 'auto',
-          max_tokens: 1500,
+          max_tokens: 3000,
         });
 
         // Log token usage for tool call iteration
