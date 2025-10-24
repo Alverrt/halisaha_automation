@@ -114,6 +114,40 @@ export class FieldAgent {
           required: ['reservation_id']
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'update_customer_info',
+        description: 'Rezervasyonun müşteri bilgilerini (ad, soyad, telefon) günceller',
+        parameters: {
+          type: 'object',
+          properties: {
+            reservation_id: { type: 'number', description: 'Güncellenecek rezervasyonun ID\'si' },
+            new_name: { type: 'string', description: 'Yeni ad soyad (opsiyonel)' },
+            new_phone: { type: 'string', description: 'Yeni telefon numarası (opsiyonel)' }
+          },
+          required: ['reservation_id']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'update_reservation_time',
+        description: 'Rezervasyonun tarih, saat veya fiyatını günceller',
+        parameters: {
+          type: 'object',
+          properties: {
+            reservation_id: { type: 'number', description: 'Güncellenecek rezervasyonun ID\'si' },
+            time_slot: { type: 'string', description: 'Yeni saat aralığı (örn: 14-15) - opsiyonel' },
+            week_offset: { type: 'number', description: 'Yeni hafta offset - opsiyonel' },
+            day_of_week: { type: 'string', description: 'Yeni haftanın günü - opsiyonel' },
+            price: { type: 'number', description: 'Yeni fiyat - opsiyonel' }
+          },
+          required: ['reservation_id']
+        }
+      }
     }
   ];
 
@@ -150,36 +184,35 @@ export class FieldAgent {
               content: `Sen bir halı saha rezervasyon yönetim asistanısın. WhatsApp üzerinden halı saha sahiplerine yardımcı oluyorsun.
 
 GÖREVLER:
-- Rezervasyon oluşturma, iptal işlemleri
+- Rezervasyon oluşturma, iptal, düzenleme işlemleri
 - Haftalık rezervasyon tablolarını gösterme (görsel olarak)
 - Satış analizleri (günlük, haftalık, aylık saat satışı ve gelir)
 - Müşteri analizleri (en sadık müşteriler, en çok iptal yapanlar)
 
-ÖNEMLİ KURALLAR - ONAY AKIŞI:
-- HER İŞLEM İÇİN (rezervasyon oluşturma, iptal) MUTLAKA KULLANICIDAN ONAY AL!
-- Bilgileri özetleyip "Onaylıyor musunuz?" veya "Devam edeyim mi?" diye sor
-- Kullanıcı "evet", "onaylıyorum", "tamam", "olur" derse işlemi yap
-- Kullanıcı "hayır", "iptal" derse işlemi yapma
+ÖNEMLİ KURALLAR:
+- İşlemleri doğrudan yap, onay alma
 - Her zaman Türkçe konuş, profesyonel ama samimi ol
 - Tarih ve saat bilgilerini dikkatli parse et
+- Kullanıcıya işlem sonucunu net bir şekilde bildir
 
 REZERVASYON İPTAL AKIŞI:
 1. Kullanıcı "Ahmet Yılmaz için rezervasyonu iptal et" derse
 2. Önce find_reservations_by_name ile rezervasyonu bul
-3. Bulduğun rezervasyonları listele: "Şu rezervasyonu bul dum: [detaylar]"
-4. "Bu rezervasyonu iptal etmemi onaylıyor musunuz?" diye sor
-5. Onay gelirse cancel_reservation çağır
+3. Bulduğun rezervasyonları listele ve doğru rezervasyonu belirle
+4. cancel_reservation ile iptal et
+5. Sonucu bildir
 
 REZERVASYON OLUŞTURMA AKIŞI:
-1. Kullanıcı bilgileri verdiğinde önce özetle:
-   "📋 Rezervasyon Özeti:
-   - Müşteri: Ahmet Yılmaz
-   - Telefon: 0545 403 19 19
-   - Tarih: 24 Ocak Pazartesi
-   - Saat: 14:00-15:00
+1. Kullanıcı bilgileri verdiğinde create_reservation çağır
+2. Sonucu bildir
 
-   Bu rezervasyonu oluşturmamı onaylıyor musunuz?"
-2. Onay gelirse create_reservation çağır
+REZERVASYON DÜZENLEME AKIŞI:
+1. Kullanıcı "Ahmet Yılmaz'ın telefon numarasını değiştir" derse
+2. Önce find_reservations_by_name ile rezervasyonu bul
+3. Doğru rezervasyonu belirle
+4. Müşteri bilgileri (ad, telefon) değişiyorsa: update_customer_info çağır
+5. Tarih, saat, fiyat değişiyorsa: update_reservation_time çağır
+6. Sonucu bildir
 
 KURALLAR:
 - Saat formatı: "9-10", "14-15", "18-19" gibi
@@ -397,6 +430,67 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
             `📅 Tarih: ${startTime.toLocaleDateString('tr-TR')}\n` +
             `⏰ Saat: ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n` +
             `${reservation.price ? `💰 Fiyat: ${reservation.price} TL\n` : ''}`;
+        }
+
+        case 'update_customer_info': {
+          const reservation = await reservationService.updateCustomerInfo(
+            args.reservation_id,
+            args.new_name,
+            args.new_phone
+          );
+
+          const startTime = new Date(reservation.start_time);
+          const endTime = new Date(reservation.end_time);
+
+          return `✅ Müşteri bilgileri güncellendi!\n\n` +
+            `👤 Yeni Ad: ${reservation.customer_name}\n` +
+            `📞 Yeni Telefon: ${reservation.phone_number}\n` +
+            `📅 Tarih: ${startTime.toLocaleDateString('tr-TR')}\n` +
+            `⏰ Saat: ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n` +
+            `${reservation.price ? `💰 Fiyat: ${reservation.price} TL` : ''}`;
+        }
+
+        case 'update_reservation_time': {
+          let newStartTime: Date | undefined;
+          let newEndTime: Date | undefined;
+
+          if (args.time_slot && args.day_of_week !== undefined && args.week_offset !== undefined) {
+            const dayMap: { [key: string]: number } = {
+              'pazartesi': 0, 'salı': 1, 'çarşamba': 2, 'perşembe': 3,
+              'cuma': 4, 'cumartesi': 5, 'pazar': 6
+            };
+
+            const dayOffset = dayMap[args.day_of_week.toLowerCase()];
+            if (dayOffset === undefined) {
+              return '❌ Geçersiz gün. Lütfen pazartesi-pazar arası bir gün belirtin.';
+            }
+
+            const weekStartDate = reservationService.getWeekStartDate(args.week_offset);
+            const reservationDate = new Date(weekStartDate);
+            reservationDate.setDate(weekStartDate.getDate() + dayOffset);
+
+            const { startHour, endHour } = reservationService.parseTimeSlot(args.time_slot);
+
+            newStartTime = reservationService.createReservationTime(reservationDate, startHour);
+            newEndTime = reservationService.createReservationTime(reservationDate, endHour);
+          }
+
+          const reservation = await reservationService.updateReservationTime(
+            args.reservation_id,
+            newStartTime,
+            newEndTime,
+            args.price
+          );
+
+          const startTime = new Date(reservation.start_time);
+          const endTime = new Date(reservation.end_time);
+
+          return `✅ Rezervasyon güncellendi!\n\n` +
+            `👤 Müşteri: ${reservation.customer_name}\n` +
+            `📞 Telefon: ${reservation.phone_number}\n` +
+            `📅 Yeni Tarih: ${startTime.toLocaleDateString('tr-TR')}\n` +
+            `⏰ Yeni Saat: ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n` +
+            `${reservation.price ? `💰 Fiyat: ${reservation.price} TL` : ''}`;
         }
 
         default:

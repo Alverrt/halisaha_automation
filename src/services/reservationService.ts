@@ -110,10 +110,11 @@ class ReservationService {
   async checkDuplicateReservation(
     customerPhone: string,
     startTime: Date,
-    endTime: Date
+    endTime: Date,
+    excludeReservationId?: number
   ): Promise<boolean> {
     // Check if customer already has a reservation at the same time
-    const query = `
+    let query = `
       SELECT COUNT(*) as count
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
@@ -122,8 +123,83 @@ class ReservationService {
       AND tsrange($2::timestamp, $3::timestamp) && tsrange(r.start_time, r.end_time)
     `;
 
-    const result = await db.query(query, [customerPhone, startTime, endTime]);
+    const params: any[] = [customerPhone, startTime, endTime];
+
+    if (excludeReservationId) {
+      query += ' AND r.id != $4';
+      params.push(excludeReservationId);
+    }
+
+    const result = await db.query(query, params);
     return parseInt(result.rows[0].count) > 0;
+  }
+
+  async updateCustomerInfo(
+    reservationId: number,
+    newName?: string,
+    newPhone?: string
+  ): Promise<ReservationDetails> {
+    const reservation = await db.getReservationById(reservationId);
+
+    if (!reservation) {
+      throw new Error('Rezervasyon bulunamadı');
+    }
+
+    if (reservation.status === 'cancelled') {
+      throw new Error('İptal edilmiş rezervasyon güncellenemez');
+    }
+
+    // Update customer info
+    await db.updateCustomer(reservation.customer_id, newName, newPhone);
+
+    // Invalidate cache
+    await this.invalidateWeekCache(new Date(reservation.start_time));
+
+    // Return updated reservation
+    return await db.getReservationById(reservationId);
+  }
+
+  async updateReservationTime(
+    reservationId: number,
+    newStartTime?: Date,
+    newEndTime?: Date,
+    newPrice?: number
+  ): Promise<ReservationDetails> {
+    const reservation = await db.getReservationById(reservationId);
+
+    if (!reservation) {
+      throw new Error('Rezervasyon bulunamadı');
+    }
+
+    if (reservation.status === 'cancelled') {
+      throw new Error('İptal edilmiş rezervasyon güncellenemez');
+    }
+
+    // Check for conflicts if time is being changed
+    if (newStartTime && newEndTime) {
+      const hasConflict = await this.checkDuplicateReservation(
+        reservation.phone_number,
+        newStartTime,
+        newEndTime,
+        reservationId // Exclude current reservation from conflict check
+      );
+
+      if (hasConflict) {
+        throw new Error('Bu müşterinin yeni saatte başka bir rezervasyonu var');
+      }
+    }
+
+    // Update reservation
+    await db.updateReservation(reservationId, newStartTime, newEndTime, newPrice);
+
+    // Invalidate cache for both old and new dates
+    await this.invalidateWeekCache(new Date(reservation.start_time));
+    if (newStartTime) {
+      await this.invalidateWeekCache(newStartTime);
+    }
+
+    // Return updated reservation
+    return await db.getReservationById(reservationId);
   }
 
   private getWeekRange(weekOffset: number = 0): { startDate: Date; endDate: Date } {

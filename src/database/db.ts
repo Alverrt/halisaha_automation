@@ -63,6 +63,37 @@ class Database {
     return result.rows[0];
   }
 
+  async updateCustomer(id: number, name?: string, phoneNumber?: string) {
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+
+    if (phoneNumber) {
+      updates.push(`phone_number = $${paramIndex++}`);
+      params.push(phoneNumber);
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No fields to update');
+    }
+
+    params.push(id);
+    const query = `
+      UPDATE customers
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING *
+    `;
+
+    const result = await this.query(query, params);
+    return result.rows[0];
+  }
+
   // Reservation operations
   async createReservation(
     customerId: number,
@@ -112,6 +143,53 @@ class Database {
       WHERE r.id = $1
     `;
     const result = await this.query(query, [id]);
+    return result.rows[0];
+  }
+
+  async updateReservation(
+    id: number,
+    startTime?: Date,
+    endTime?: Date,
+    price?: number,
+    notes?: string
+  ) {
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (startTime) {
+      updates.push(`start_time = $${paramIndex++}`);
+      params.push(startTime);
+    }
+
+    if (endTime) {
+      updates.push(`end_time = $${paramIndex++}`);
+      params.push(endTime);
+    }
+
+    if (price !== undefined) {
+      updates.push(`price = $${paramIndex++}`);
+      params.push(price);
+    }
+
+    if (notes !== undefined) {
+      updates.push(`notes = $${paramIndex++}`);
+      params.push(notes);
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No fields to update');
+    }
+
+    params.push(id);
+    const query = `
+      UPDATE reservations
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING *
+    `;
+
+    const result = await this.query(query, params);
     return result.rows[0];
   }
 
