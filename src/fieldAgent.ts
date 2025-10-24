@@ -298,6 +298,11 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
 
       session.lastActivity = now;
 
+      // Ensure totalTokens is initialized
+      if (session.totalTokens === undefined) {
+        session.totalTokens = 0;
+      }
+
       session.messages.push({
         role: 'user',
         content: message,
