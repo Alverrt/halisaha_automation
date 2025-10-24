@@ -277,6 +277,133 @@ class Database {
     const result = await this.query(query, [startDate, endDate]);
     return result.rows;
   }
+
+  // Token usage tracking operations
+  async logTokenUsage(
+    userId: string,
+    model: string,
+    modelType: 'chat' | 'whisper' | 'tts' | 'image',
+    promptTokens: number | null,
+    completionTokens: number | null,
+    totalTokens: number,
+    requestType?: string
+  ) {
+    const query = `
+      INSERT INTO token_usage (user_id, model, model_type, prompt_tokens, completion_tokens, total_tokens, request_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `;
+    const result = await this.query(query, [
+      userId,
+      model,
+      modelType,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      requestType || null,
+    ]);
+    return result.rows[0];
+  }
+
+  async getTokenUsageStats(startDate?: Date, endDate?: Date) {
+    let query = `
+      SELECT
+        model,
+        model_type,
+        COUNT(*) as request_count,
+        SUM(prompt_tokens) as total_prompt_tokens,
+        SUM(completion_tokens) as total_completion_tokens,
+        SUM(total_tokens) as total_tokens
+      FROM token_usage
+    `;
+
+    const params: any[] = [];
+    const whereClauses: string[] = [];
+
+    if (startDate) {
+      whereClauses.push(`created_at >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      whereClauses.push(`created_at <= $${params.length + 1}`);
+      params.push(endDate);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
+    query += ` GROUP BY model, model_type ORDER BY total_tokens DESC`;
+
+    const result = await this.query(query, params);
+    return result.rows;
+  }
+
+  async getTokenUsageByUser(startDate?: Date, endDate?: Date) {
+    let query = `
+      SELECT
+        user_id,
+        COUNT(*) as request_count,
+        SUM(prompt_tokens) as total_prompt_tokens,
+        SUM(completion_tokens) as total_completion_tokens,
+        SUM(total_tokens) as total_tokens
+      FROM token_usage
+    `;
+
+    const params: any[] = [];
+    const whereClauses: string[] = [];
+
+    if (startDate) {
+      whereClauses.push(`created_at >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      whereClauses.push(`created_at <= $${params.length + 1}`);
+      params.push(endDate);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
+    query += ` GROUP BY user_id ORDER BY total_tokens DESC`;
+
+    const result = await this.query(query, params);
+    return result.rows;
+  }
+
+  async getTotalTokenUsage(startDate?: Date, endDate?: Date) {
+    let query = `
+      SELECT
+        COUNT(*) as total_requests,
+        SUM(prompt_tokens) as total_prompt_tokens,
+        SUM(completion_tokens) as total_completion_tokens,
+        SUM(total_tokens) as total_tokens
+      FROM token_usage
+    `;
+
+    const params: any[] = [];
+    const whereClauses: string[] = [];
+
+    if (startDate) {
+      whereClauses.push(`created_at >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      whereClauses.push(`created_at <= $${params.length + 1}`);
+      params.push(endDate);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
+    const result = await this.query(query, params);
+    return result.rows[0];
+  }
 }
 
 export const db = new Database();

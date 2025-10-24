@@ -58,3 +58,22 @@ CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
 DROP TRIGGER IF EXISTS update_reservations_updated_at ON reservations;
 CREATE TRIGGER update_reservations_updated_at BEFORE UPDATE ON reservations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Token usage tracking table
+CREATE TABLE IF NOT EXISTS token_usage (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    model_type VARCHAR(50) NOT NULL CHECK (model_type IN ('chat', 'whisper', 'tts', 'image')),
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER NOT NULL,
+    request_type VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for token usage analytics
+CREATE INDEX IF NOT EXISTS idx_token_usage_user_id ON token_usage(user_id);
+CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(model);
+CREATE INDEX IF NOT EXISTS idx_token_usage_model_type ON token_usage(model_type);

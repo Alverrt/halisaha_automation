@@ -4,6 +4,7 @@ import { WhatsAppClient } from './whatsappClient';
 import { FieldAgent } from './fieldAgent';
 import { AudioService } from './audioService';
 import { runMigration } from './database/migrate';
+import { db } from './database/db';
 
 const app = express();
 app.use(express.json());
@@ -126,6 +127,69 @@ app.post('/webhook', async (req: Request, res: Response) => {
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok' });
+});
+
+// Token usage analytics endpoint
+app.get('/token-usage', async (req: Request, res: Response) => {
+  try {
+    const { start_date, end_date, group_by } = req.query;
+
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (start_date && typeof start_date === 'string') {
+      startDate = new Date(start_date);
+    }
+
+    if (end_date && typeof end_date === 'string') {
+      endDate = new Date(end_date);
+    }
+
+    // Get overall statistics
+    const totalStats = await db.getTotalTokenUsage(startDate, endDate);
+
+    // Get breakdown by model and type
+    const modelStats = await db.getTokenUsageStats(startDate, endDate);
+
+    // Get breakdown by user if requested
+    let userStats = null;
+    if (group_by === 'user') {
+      userStats = await db.getTokenUsageByUser(startDate, endDate);
+    }
+
+    res.status(200).json({
+      period: {
+        start: startDate || 'all_time',
+        end: endDate || 'now',
+      },
+      total: {
+        requests: parseInt(totalStats.total_requests) || 0,
+        prompt_tokens: parseInt(totalStats.total_prompt_tokens) || 0,
+        completion_tokens: parseInt(totalStats.total_completion_tokens) || 0,
+        total_tokens: parseInt(totalStats.total_tokens) || 0,
+      },
+      by_model: modelStats.map((stat: any) => ({
+        model: stat.model,
+        model_type: stat.model_type,
+        requests: parseInt(stat.request_count),
+        prompt_tokens: parseInt(stat.total_prompt_tokens) || 0,
+        completion_tokens: parseInt(stat.total_completion_tokens) || 0,
+        total_tokens: parseInt(stat.total_tokens),
+      })),
+      ...(userStats && {
+        by_user: userStats.map((stat: any) => ({
+          user_id: stat.user_id,
+          requests: parseInt(stat.request_count),
+          prompt_tokens: parseInt(stat.total_prompt_tokens) || 0,
+          completion_tokens: parseInt(stat.total_completion_tokens) || 0,
+          total_tokens: parseInt(stat.total_tokens),
+        })),
+      }),
+    });
+  } catch (error) {
+    console.error('Error fetching token usage:', error);
+    res.status(500).json({ error: 'Failed to fetch token usage statistics' });
+  }
 });
 
 // Start server

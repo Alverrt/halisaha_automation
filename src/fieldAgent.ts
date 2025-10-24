@@ -5,6 +5,7 @@ import { analyticsService } from './services/analyticsService';
 import { tableVisualizationService } from './services/tableVisualizationService';
 import { WhatsAppClient } from './whatsappClient';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
+import { db } from './database/db';
 
 export class FieldAgent {
   private openai: OpenAI;
@@ -242,6 +243,19 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
         max_tokens: 1500,
       });
 
+      // Log token usage
+      if (response.usage) {
+        await db.logTokenUsage(
+          userId,
+          'gpt-4o-mini',
+          'chat',
+          response.usage.prompt_tokens,
+          response.usage.completion_tokens,
+          response.usage.total_tokens,
+          'chat_completion'
+        ).catch(err => console.error('Failed to log token usage:', err));
+      }
+
       let assistantMessage = response.choices[0].message;
       session.messages.push(assistantMessage);
 
@@ -276,12 +290,31 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
           max_tokens: 1500,
         });
 
+        // Log token usage for tool call iteration
+        if (response.usage) {
+          await db.logTokenUsage(
+            userId,
+            'gpt-4o-mini',
+            'chat',
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens,
+            response.usage.total_tokens,
+            'tool_call_iteration'
+          ).catch(err => console.error('Failed to log token usage:', err));
+        }
+
         assistantMessage = response.choices[0].message;
         session.messages.push(assistantMessage);
       }
 
       if (session.messages.length > 21) {
-        session.messages = [session.messages[0], ...session.messages.slice(-20)];
+        const systemMessage = session.messages[0];
+        let recentMessages = session.messages.slice(-20);
+
+        // Remove orphaned tool messages (tool messages without preceding tool_calls)
+        recentMessages = this.cleanOrphanedToolMessages(recentMessages);
+
+        session.messages = [systemMessage, ...recentMessages];
       }
 
       this.conversationHistory.set(userId, session);
@@ -505,5 +538,33 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
   clearHistory(userId: string): void {
     this.conversationHistory.delete(userId);
     console.log(`Conversation history cleared for user: ${userId}`);
+  }
+
+  private cleanOrphanedToolMessages(messages: ChatCompletionMessageParam[]): ChatCompletionMessageParam[] {
+    const cleaned: ChatCompletionMessageParam[] = [];
+    const validToolCallIds = new Set<string>();
+
+    // First pass: collect all tool_call_ids from assistant messages
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && 'tool_calls' in msg && msg.tool_calls) {
+        for (const toolCall of msg.tool_calls) {
+          validToolCallIds.add(toolCall.id);
+        }
+      }
+    }
+
+    // Second pass: only keep tool messages that have a valid tool_call_id
+    for (const msg of messages) {
+      if (msg.role === 'tool') {
+        // Only keep tool messages that reference a valid tool_call_id
+        if ('tool_call_id' in msg && validToolCallIds.has(msg.tool_call_id)) {
+          cleaned.push(msg);
+        }
+      } else {
+        cleaned.push(msg);
+      }
+    }
+
+    return cleaned;
   }
 }
