@@ -19,11 +19,20 @@ CREATE TABLE IF NOT EXISTS reservations (
     price DECIMAL(10, 2),
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT no_overlapping_reservations EXCLUDE USING GIST (
-        tsrange(start_time, end_time) WITH &&
-    ) WHERE (status = 'active')
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add exclusion constraint separately (so it doesn't fail if table already exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'no_overlapping_reservations'
+    ) THEN
+        ALTER TABLE reservations ADD CONSTRAINT no_overlapping_reservations
+        EXCLUDE USING GIST (tsrange(start_time, end_time) WITH &&)
+        WHERE (status = 'active');
+    END IF;
+END $$;
 
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_reservations_customer_id ON reservations(customer_id);
@@ -41,9 +50,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Triggers for updated_at
+-- Triggers for updated_at (drop if exists first to make idempotent)
+DROP TRIGGER IF EXISTS update_customers_updated_at ON customers;
 CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_reservations_updated_at ON reservations;
 CREATE TRIGGER update_reservations_updated_at BEFORE UPDATE ON reservations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
