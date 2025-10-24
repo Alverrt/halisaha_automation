@@ -58,6 +58,9 @@ RUN apk add --no-cache --virtual .build-deps \
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy SQL files (not compiled by TypeScript)
+COPY --from=builder /app/src/database/*.sql ./dist/database/
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
