@@ -219,11 +219,34 @@ class ReservationService {
   }
 
   private async invalidateWeekCache(date: Date): Promise<void> {
-    // Invalidate current week and nearby weeks
-    for (let offset = -1; offset <= 1; offset++) {
+    // Calculate which week offset this date belongs to
+    const targetWeekOffset = this.calculateWeekOffset(date);
+
+    // Invalidate target week and nearby weeks
+    for (let offset = targetWeekOffset - 1; offset <= targetWeekOffset + 1; offset++) {
       const cacheKey = cacheService.getWeekTableCacheKey(offset);
       await cacheService.del(cacheKey);
     }
+  }
+
+  private calculateWeekOffset(date: Date): number {
+    // Calculate how many weeks from now this date is
+    const now = new Date();
+    const currentDay = now.getDay();
+    const diff = currentDay === 0 ? -6 : 1 - currentDay;
+
+    const thisWeekStart = new Date(now);
+    thisWeekStart.setDate(now.getDate() + diff);
+    thisWeekStart.setHours(0, 0, 0, 0);
+
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const diffMs = targetDate.getTime() - thisWeekStart.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const weekOffset = Math.floor(diffDays / 7);
+
+    return weekOffset;
   }
 
   getWeekStartDate(weekOffset: number = 0): Date {
