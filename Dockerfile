@@ -31,14 +31,19 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies for canvas and utilities
+# Install runtime dependencies for canvas, utilities, and fonts for Turkish support
 RUN apk add --no-cache \
     cairo \
     jpeg \
     pango \
     giflib \
     pixman \
-    wget
+    wget \
+    font-noto \
+    font-noto-extra \
+    fontconfig \
+    ttf-dejavu \
+    && fc-cache -f
 
 # Copy package files
 COPY package*.json ./

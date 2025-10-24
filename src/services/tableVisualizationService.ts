@@ -13,8 +13,10 @@ class TableVisualizationService {
   private readonly HEADER_HEIGHT = 70;
   private readonly TIME_COLUMN_WIDTH = 140;
   private readonly DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-  // 12:00 to 06:00 (next day) = 18 hours
+  // 12:00 to 06:00 (next day) = 19 hours
   private readonly HOURS = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6];
+  // Use DejaVu Sans font which supports Turkish characters
+  private readonly FONT_FAMILY = '"DejaVu Sans", "Noto Sans", sans-serif';
 
   async generateWeekTable(
     reservations: ReservationDetails[],
@@ -48,7 +50,7 @@ class TableVisualizationService {
     ctx.fillRect(0, 0, this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * 7, this.HEADER_HEIGHT);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 15px sans-serif';
+    ctx.font = `bold 15px ${this.FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -64,18 +66,18 @@ class TableVisualizationService {
 
       const x = this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * index + this.CELL_WIDTH / 2;
 
-      // Use sans-serif for better Turkish character support
-      ctx.font = 'bold 14px sans-serif';
+      // Use DejaVu Sans for Turkish character support
+      ctx.font = `bold 14px ${this.FONT_FAMILY}`;
       ctx.fillText(day, x, this.HEADER_HEIGHT / 2 - 12);
 
-      ctx.font = '12px sans-serif';
+      ctx.font = `12px ${this.FONT_FAMILY}`;
       ctx.fillText(`${dayNum}/${month}`, x, this.HEADER_HEIGHT / 2 + 12);
     });
   }
 
   private drawTimeColumn(ctx: any): void {
     ctx.fillStyle = '#34495e';
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${this.FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -173,22 +175,22 @@ class TableVisualizationService {
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ');
 
-        ctx.font = 'bold 13px sans-serif';
+        ctx.font = `bold 13px ${this.FONT_FAMILY}`;
         ctx.fillText(firstName, centerX, currentY);
         currentY += 16;
 
-        ctx.font = 'bold 13px sans-serif';
+        ctx.font = `bold 13px ${this.FONT_FAMILY}`;
         ctx.fillText(lastName, centerX, currentY);
         currentY += 18;
       } else {
         // Single name only
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = `bold 14px ${this.FONT_FAMILY}`;
         ctx.fillText(fullName, centerX, currentY);
         currentY += 18;
       }
 
       // Phone number (more visible)
-      ctx.font = '12px sans-serif';
+      ctx.font = `12px ${this.FONT_FAMILY}`;
       ctx.fillText(reservation.phone_number, centerX, currentY);
     });
   }
@@ -216,7 +218,7 @@ class TableVisualizationService {
 
     // Title
     ctx.fillStyle = '#2c3e50';
-    ctx.font = 'bold 20px sans-serif';
+    ctx.font = `bold 20px ${this.FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
