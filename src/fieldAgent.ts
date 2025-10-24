@@ -308,7 +308,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
         messages: session.messages,
         tools: this.tools,
         tool_choice: 'auto',
-        max_tokens: config.openai.maxTokens,
+        max_completion_tokens: config.openai.maxTokens,
       });
 
       // Log token usage
@@ -358,7 +358,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
           messages: session.messages,
           tools: this.tools,
           tool_choice: 'auto',
-          max_tokens: config.openai.maxTokens,
+          max_completion_tokens: config.openai.maxTokens,
         });
 
         // Log token usage for tool call iteration
