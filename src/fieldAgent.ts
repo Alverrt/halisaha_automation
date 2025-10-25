@@ -145,6 +145,18 @@ export class FieldAgent {
     {
       type: 'function',
       function: {
+        name: 'get_current_time',
+        description: 'İstanbul saat diliminde (GMT+3) şu anki tarihi ve saati döndürür. "Bu akşam", "yarın", "bugün" gibi zaman ifadelerini anlamak için kullan.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'update_customer_info',
         description: 'Rezervasyonun müşteri bilgilerini (ad, soyad, telefon) günceller',
         parameters: {
@@ -261,8 +273,11 @@ KURALLAR:
     - "14-15'e rezervasyon yap" → time_slot: "14-15" (14:00-15:00 olarak kalır)
 
 - TARİH KURALI:
-  * "bugün" veya "bu gün" → Bugünün haftanın hangi günü olduğunu hesapla, week_offset: 0, day_of_week: o gün
-  * "yarın" → Yarının haftanın hangi günü olduğunu hesapla, week_offset: 0, day_of_week: yarının günü
+  * ÖNEMLİ: "bugün", "yarın", "bu akşam" gibi zaman ifadeleri için MUTLAKA önce get_current_time fonksiyonunu çağır
+  * get_current_time ile şu anki tarihi ve günü öğrendikten sonra:
+  * "bugün" veya "bu gün" → Bugünün haftanın hangi günü olduğunu get_current_time'dan öğren, week_offset: 0, day_of_week: o gün
+  * "bu akşam" → Bugünün akşamı demek, get_current_time ile günü öğren, week_offset: 0, day_of_week: bugünün günü
+  * "yarın" → get_current_time ile bugünün gününü öğren, yarının günü hesapla, week_offset: 0, day_of_week: yarının günü
   * "pazartesi", "salı" vs → week_offset: 0 (bu hafta), day_of_week: belirtilen gün
   * "gelecek hafta pazartesi" → week_offset: 1, day_of_week: pazartesi
 
@@ -548,6 +563,19 @@ Kullanícıya her zaman yardımcı ol ve net bilgi ver.`,
           });
 
           return message;
+        }
+
+        case 'get_current_time': {
+          const now = new Date();
+          const istanbulTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }));
+
+          const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+          const dayName = dayNames[istanbulTime.getDay()];
+
+          return `📅 Şu anki tarih ve saat (İstanbul - GMT+3):\n` +
+            `📆 Tarih: ${istanbulTime.toLocaleDateString('tr-TR')}\n` +
+            `📆 Gün: ${dayName}\n` +
+            `⏰ Saat: ${istanbulTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
         }
 
         case 'update_customer_info': {
