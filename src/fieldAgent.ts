@@ -9,9 +9,7 @@ import { db } from './database/db';
 
 export class FieldAgent {
   private openai: OpenAI;
-  private conversationHistory: Map<string, { messages: ChatCompletionMessageParam[]; lastActivity: number; totalTokens: number }>;
   private whatsappClient: WhatsAppClient;
-  private readonly SESSION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
   private tools: ChatCompletionTool[] = [
     {
@@ -184,32 +182,15 @@ export class FieldAgent {
     this.openai = new OpenAI({
       apiKey: config.openai.apiKey,
     });
-    this.conversationHistory = new Map();
     this.whatsappClient = whatsappClient;
-
-    setInterval(() => this.cleanupOldSessions(), 60 * 1000);
-  }
-
-  private cleanupOldSessions(): void {
-    const now = Date.now();
-    for (const [userId, session] of this.conversationHistory.entries()) {
-      if (now - session.lastActivity > this.SESSION_TIMEOUT) {
-        this.conversationHistory.delete(userId);
-        console.log(`Session expired for user: ${userId}`);
-      }
-    }
   }
 
   async processMessage(userId: string, message: string): Promise<string> {
     try {
-      const now = Date.now();
-      let session = this.conversationHistory.get(userId);
-
-      if (!session || (now - session.lastActivity > this.SESSION_TIMEOUT)) {
-        session = {
-          messages: [
-            {
-              role: 'system',
+      // Create fresh messages array for each request (stateless)
+      const messages: ChatCompletionMessageParam[] = [
+        {
+          role: 'system',
               content: `Sen bir halı saha rezervasyon yönetim asistanısın. WhatsApp üzerinden halı saha sahiplerine yardımcı oluyorsun.
 
 GÖREVLER:
@@ -287,40 +268,26 @@ KURALLAR:
 
 - Haftanın günleri: pazartesi, salı, çarşamba, perşembe, cuma, cumartesi, pazar
 
-Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
-            },
-          ],
-          lastActivity: now,
-          totalTokens: 0,
-        };
-        this.conversationHistory.set(userId, session);
-      }
-
-      session.lastActivity = now;
-
-      // Ensure totalTokens is initialized
-      if (session.totalTokens === undefined) {
-        session.totalTokens = 0;
-      }
-
-      session.messages.push({
-        role: 'user',
-        content: message,
-      });
+Kullanícıya her zaman yardımcı ol ve net bilgi ver.`,
+        },
+        {
+          role: 'user',
+          content: message,
+        }
+      ];
 
       let response = await this.openai.chat.completions.create({
         model: config.openai.model,
-        messages: session.messages,
+        messages: messages,
         tools: this.tools,
         tool_choice: 'auto',
         max_completion_tokens: config.openai.maxTokens,
       });
 
       // Log token usage
-      let conversationTokens = 0;
+      let totalTokens = 0;
       if (response.usage) {
-        conversationTokens += response.usage.total_tokens;
-        session.totalTokens += response.usage.total_tokens;
+        totalTokens += response.usage.total_tokens;
         await db.logTokenUsage(
           userId,
           config.openai.model,
@@ -333,7 +300,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
       }
 
       let assistantMessage = response.choices[0].message;
-      session.messages.push(assistantMessage);
+      messages.push(assistantMessage);
 
       const maxIterations = 7;
       let iteration = 0;
@@ -350,7 +317,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
 
             const functionResult = await this.executeFunction(functionName, functionArgs, userId);
 
-            session.messages.push({
+            messages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
               content: functionResult,
@@ -360,7 +327,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
 
         response = await this.openai.chat.completions.create({
           model: config.openai.model,
-          messages: session.messages,
+          messages: messages,
           tools: this.tools,
           tool_choice: 'auto',
           max_completion_tokens: config.openai.maxTokens,
@@ -368,8 +335,7 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
 
         // Log token usage for tool call iteration
         if (response.usage) {
-          conversationTokens += response.usage.total_tokens;
-          session.totalTokens += response.usage.total_tokens;
+          totalTokens += response.usage.total_tokens;
           await db.logTokenUsage(
             userId,
             config.openai.model,
@@ -382,26 +348,14 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
         }
 
         assistantMessage = response.choices[0].message;
-        session.messages.push(assistantMessage);
+        messages.push(assistantMessage);
       }
-
-      if (session.messages.length > 21) {
-        const systemMessage = session.messages[0];
-        let recentMessages = session.messages.slice(-20);
-
-        // Remove orphaned tool messages (tool messages without preceding tool_calls)
-        recentMessages = this.cleanOrphanedToolMessages(recentMessages);
-
-        session.messages = [systemMessage, ...recentMessages];
-      }
-
-      this.conversationHistory.set(userId, session);
 
       let finalResponse = assistantMessage.content || 'Üzgünüm, bir yanıt oluşturamadım.';
 
       // Add token usage info in development
       if (process.env.NODE_ENV !== 'production') {
-        finalResponse += `\n\n(Tokens: ${conversationTokens} this msg, ${session.totalTokens} total)`;
+        finalResponse += `\n\n(Tokens: ${totalTokens})`;
       }
 
       return finalResponse;
@@ -666,36 +620,4 @@ Kullanıcıya her zaman yardımcı ol ve net bilgi ver.`,
     }
   }
 
-  clearHistory(userId: string): void {
-    this.conversationHistory.delete(userId);
-    console.log(`Conversation history cleared for user: ${userId}`);
-  }
-
-  private cleanOrphanedToolMessages(messages: ChatCompletionMessageParam[]): ChatCompletionMessageParam[] {
-    const cleaned: ChatCompletionMessageParam[] = [];
-    const validToolCallIds = new Set<string>();
-
-    // First pass: collect all tool_call_ids from assistant messages
-    for (const msg of messages) {
-      if (msg.role === 'assistant' && 'tool_calls' in msg && msg.tool_calls) {
-        for (const toolCall of msg.tool_calls) {
-          validToolCallIds.add(toolCall.id);
-        }
-      }
-    }
-
-    // Second pass: only keep tool messages that have a valid tool_call_id
-    for (const msg of messages) {
-      if (msg.role === 'tool') {
-        // Only keep tool messages that reference a valid tool_call_id
-        if ('tool_call_id' in msg && validToolCallIds.has(msg.tool_call_id)) {
-          cleaned.push(msg);
-        }
-      } else {
-        cleaned.push(msg);
-      }
-    }
-
-    return cleaned;
-  }
 }
