@@ -33,9 +33,9 @@ services:
       # Database and Redis
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-halisaha}
       - REDIS_URL=redis://redis:6379
-    volumes:
+    # volumes:
       # Mount service account key file for Vertex AI authentication (optional - only if using file method)
-      # Uncomment the line below if you're using Method 3 (file mount) instead of environment variables
+      # Uncomment the lines below if you're using Method 3 (file mount) instead of environment variables
       # - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./service-account-key.json}:/app/.gcloud/service-account-key.json:ro
     depends_on:
       postgres:
