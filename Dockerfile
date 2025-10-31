@@ -95,13 +95,26 @@ RUN echo '#!/bin/sh' > /entrypoint.sh && \
     echo '# Handle Google Cloud credentials from environment variables' >> /entrypoint.sh && \
     echo 'if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY_BASE64" ]; then' >> /entrypoint.sh && \
     echo '  echo "Creating service account key from base64 env var..."' >> /entrypoint.sh && \
+    echo '  # Remove if exists as directory' >> /entrypoint.sh && \
+    echo '  if [ -d /app/.gcloud/service-account-key.json ]; then' >> /entrypoint.sh && \
+    echo '    rm -rf /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  fi' >> /entrypoint.sh && \
     echo '  echo "$GOOGLE_SERVICE_ACCOUNT_KEY_BASE64" | base64 -d > /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
     echo '  chmod 600 /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
     echo '  export GOOGLE_APPLICATION_CREDENTIALS=/app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  echo "Service account key created successfully"' >> /entrypoint.sh && \
     echo 'elif [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY_JSON" ]; then' >> /entrypoint.sh && \
     echo '  echo "Creating service account key from JSON env var..."' >> /entrypoint.sh && \
+    echo '  # Remove if exists as directory' >> /entrypoint.sh && \
+    echo '  if [ -d /app/.gcloud/service-account-key.json ]; then' >> /entrypoint.sh && \
+    echo '    rm -rf /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  fi' >> /entrypoint.sh && \
     echo '  echo "$GOOGLE_SERVICE_ACCOUNT_KEY_JSON" > /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
     echo '  chmod 600 /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  export GOOGLE_APPLICATION_CREDENTIALS=/app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  echo "Service account key created successfully"' >> /entrypoint.sh && \
+    echo 'elif [ -f /app/.gcloud/service-account-key.json ]; then' >> /entrypoint.sh && \
+    echo '  echo "Using existing service account key file"' >> /entrypoint.sh && \
     echo '  export GOOGLE_APPLICATION_CREDENTIALS=/app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
     echo 'fi' >> /entrypoint.sh && \
     echo '' >> /entrypoint.sh && \
