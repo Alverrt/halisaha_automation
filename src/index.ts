@@ -53,6 +53,15 @@ app.post('/webhook', async (req: Request, res: Response) => {
                 const messageId = message.id;
                 const messageType = message.type;
 
+                // Check if message was already processed (deduplication)
+                if (processedMessages.has(messageId)) {
+                  console.log(`Skipping duplicate message: ${messageId}`);
+                  continue;
+                }
+
+                // Add to processed messages cache
+                processedMessages.add(messageId);
+
                 // Mark message as read
                 await whatsappClient.markAsRead(messageId);
 
@@ -193,6 +202,15 @@ app.get('/token-usage', async (req: Request, res: Response) => {
 });
 
 // Start server
+// Message deduplication cache (stores message IDs for 5 minutes)
+const processedMessages = new Set<string>();
+const MESSAGE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Clean up old message IDs every minute
+setInterval(() => {
+  processedMessages.clear();
+}, MESSAGE_CACHE_DURATION);
+
 const PORT = config.server.port;
 app.listen(PORT, () => {
   console.log(`⚽ WhatsApp Football Field Reservation Bot is running on port ${PORT}`);
