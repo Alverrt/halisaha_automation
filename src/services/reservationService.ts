@@ -298,21 +298,21 @@ class ReservationService {
     let startHour = parseInt(match[1]);
     let endHour = parseInt(match[2]);
 
-    // Default behavior: if hour is 6-11, it's already correct (morning or evening edge cases)
+    // Default behavior: if hour is 6-12, it's already correct (morning or evening edge cases)
     // If hour is 1-5 without "sabah" keyword, treat as early morning (01:00-05:00)
-    // If hour is 12-23, use as-is
-    // Otherwise, if hour is 6-11 and no "sabah" keyword, convert to PM (add 12)
+    // If hour is 13-23, use as-is
+    // Otherwise, if hour is 6-12 and no "sabah" keyword, convert to PM (add 12)
 
     if (!isMorning) {
-      // Convert to PM (evening) if hour is between 6-11
-      if (startHour >= 6 && startHour <= 11) {
+      // Convert to PM (evening) if hour is between 6-12
+      if (startHour >= 6 && startHour <= 12) {
         startHour += 12;
       }
-      if (endHour >= 6 && endHour <= 11) {
+      if (endHour >= 6 && endHour <= 12) {
         endHour += 12;
       }
       // Hours 1-5 without "sabah" are treated as early morning (past midnight)
-      // Hours 12-23 stay as-is
+      // Hours 13-23 stay as-is
     }
 
     return {
@@ -323,7 +323,15 @@ class ReservationService {
 
   createReservationTime(date: Date, hour: number): Date {
     const result = new Date(date);
-    result.setHours(hour, 0, 0, 0);
+
+    // If hour is 24 or greater, it means next day
+    if (hour >= 24) {
+      result.setDate(result.getDate() + 1);
+      result.setHours(hour - 24, 0, 0, 0);
+    } else {
+      result.setHours(hour, 0, 0, 0);
+    }
+
     return result;
   }
 }
