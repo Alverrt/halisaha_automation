@@ -4,3 +4,8 @@ dist/
 *.log
 .DS_Store
 test-output/
+
+# Google Cloud service account keys
+service-account-key.json
+*-service-account*.json
+.gcloud/

@@ -15,9 +15,24 @@ services:
       - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
       - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
       - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-3000}
+      # OpenAI Configuration (if using LLM_PROVIDER=openai)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-3000}
+      # Vertex AI / Gemini Configuration
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/app/.gcloud/service-account-key.json}
+      # Database and Redis
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-halisaha}
       - REDIS_URL=redis://redis:6379
+    volumes:
+      # Mount service account key file for Vertex AI authentication
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./service-account-key.json}:/app/.gcloud/service-account-key.json:ro
     depends_on:
       postgres:
         condition: service_healthy

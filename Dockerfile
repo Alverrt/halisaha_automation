@@ -31,7 +31,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies for canvas, utilities, and fonts for Turkish support
+# Install runtime dependencies for canvas, utilities, fonts for Turkish support, and ca-certificates for Google Cloud
 RUN apk add --no-cache \
     cairo \
     jpeg \
@@ -43,6 +43,7 @@ RUN apk add --no-cache \
     font-noto-extra \
     fontconfig \
     ttf-dejavu \
+    ca-certificates \
     && fc-cache -f
 
 # Copy package files
@@ -70,6 +71,10 @@ COPY --from=builder /app/src/database/*.sql ./dist/database/
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Create directory for Google Cloud credentials
+RUN mkdir -p /app/.gcloud && \
+    chown -R nodejs:nodejs /app/.gcloud
+
 # Change ownership
 RUN chown -R nodejs:nodejs /app
 
@@ -81,6 +86,33 @@ EXPOSE 3000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Create entrypoint script for Google Cloud credentials handling
+USER root
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'set -e' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Handle Google Cloud credentials from environment variables' >> /entrypoint.sh && \
+    echo 'if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY_BASE64" ]; then' >> /entrypoint.sh && \
+    echo '  echo "Creating service account key from base64 env var..."' >> /entrypoint.sh && \
+    echo '  echo "$GOOGLE_SERVICE_ACCOUNT_KEY_BASE64" | base64 -d > /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  chmod 600 /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  export GOOGLE_APPLICATION_CREDENTIALS=/app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo 'elif [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY_JSON" ]; then' >> /entrypoint.sh && \
+    echo '  echo "Creating service account key from JSON env var..."' >> /entrypoint.sh && \
+    echo '  echo "$GOOGLE_SERVICE_ACCOUNT_KEY_JSON" > /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  chmod 600 /app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo '  export GOOGLE_APPLICATION_CREDENTIALS=/app/.gcloud/service-account-key.json' >> /entrypoint.sh && \
+    echo 'fi' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo 'exec "$@"' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh && \
+    chown nodejs:nodejs /entrypoint.sh
+
+USER nodejs
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Start the application
 CMD ["node", "dist/index.js"]
