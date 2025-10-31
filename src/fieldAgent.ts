@@ -224,10 +224,20 @@ SAAT:
 - time_slot: kullanıcının dediği gibi yaz
 
 TARİH:
-- "bugün/yarın" → get_current_time ile günü öğren
+- İLK get_current_time çağır, bugünün gününü öğren
+- Kullanıcı spesifik hafta belirtmediyse → bu hafta demektir
+- Kullanıcı bir gün adı söylerse (pazartesi, salı vb.):
+  * O gün bu hafta GEÇMEDİYSE → week_offset:0
+  * O gün bu hafta GEÇTİYSE → week_offset:1 (gelecek hafta)
+  * Örnek: Bugün Cuma, kullanıcı "pazartesi" derse → geçti, week_offset:1
+  * Örnek: Bugün Cuma, kullanıcı "pazar" derse → gelmedi, week_offset:0
 - "bugün" → week_offset:0, day_of_week: bugünün günü
-- "yarın" → week_offset:0, day_of_week: yarının günü
-- "pazartesi" → week_offset:0, day_of_week:pazartesi
+- "yarın" → yarının gününü hesapla, uygun week_offset ver
+
+FORMATLAMA:
+- Tool sonuçları zaten formatlanmış, AYNEN kullan
+- Tool sonucuna ekstra * veya ** ekleme
+- Sadece kendi cümlelerinde WhatsApp formatı (*kalın*, _italik_) kullanabilirsin
 
 Türkçe konuş, profesyonel+samimi ol.`,
           }
@@ -505,12 +515,12 @@ Türkçe konuş, profesyonel+samimi ol.`,
             const startTime = new Date(res.start_time);
             const endTime = new Date(res.end_time);
 
-            message += `${index + 1}. ID: ${res.id}\n`;
-            message += `   👤 ${res.customer_name}\n`;
-            message += `   📞 ${res.phone_number}\n`;
-            message += `   📅 ${startTime.toLocaleDateString('tr-TR')}\n`;
-            message += `   ⏰ ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
-            if (res.price) message += `   💰 ${res.price} TL\n`;
+            message += `${index + 1}. *ID:* ${res.id}\n`;
+            message += `   *Adı Soyadı:* ${res.customer_name}\n`;
+            message += `   *Telefon:* ${res.phone_number}\n`;
+            message += `   *Tarih:* ${startTime.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+            message += `   *Saat:* ${startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}-${endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
+            if (res.price) message += `   *Fiyat:* ${res.price} TL\n`;
             message += '\n';
           });
 
