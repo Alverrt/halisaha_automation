@@ -1,6 +1,9 @@
 -- Multitenancy Migration
 -- Adds tenant isolation based on WhatsApp phone numbers
 
+-- Enable btree_gist extension for integer support in GIST indexes
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 -- 1. Create tenants table
 CREATE TABLE IF NOT EXISTS tenants (
     id SERIAL PRIMARY KEY,
