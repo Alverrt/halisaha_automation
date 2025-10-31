@@ -5,6 +5,7 @@ import { FieldAgent } from './fieldAgent';
 import { AudioService } from './audioService';
 import { runMigration } from './database/migrate';
 import { db } from './database/db';
+import { tenantService } from './services/tenantService';
 
 const app = express();
 app.use(express.json());
@@ -45,6 +46,12 @@ app.post('/webhook', async (req: Request, res: Response) => {
         for (const change of entry.changes || []) {
           if (change.field === 'messages') {
             const value = change.value;
+
+            // Extract tenant information (business WhatsApp phone number)
+            const businessPhoneNumber = value.metadata?.phone_number_id || value.metadata?.display_phone_number || config.whatsapp.phoneNumberId;
+
+            // Get or create tenant for this WhatsApp business number
+            const tenantId = await tenantService.getOrCreateTenant(businessPhoneNumber);
 
             // Process messages
             if (value.messages && value.messages.length > 0) {

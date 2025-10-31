@@ -15,16 +15,21 @@ async function runMigration() {
   try {
     console.log('Starting database migration...');
 
-    // Read schema file
+    // Read and execute base schema file
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
-
-    // Execute schema
     await client.query(schema);
+    console.log('✅ Base schema migration completed');
 
-    console.log('Database migration completed successfully!');
+    // Read and execute multitenancy migration
+    const multitenancyPath = join(__dirname, 'multitenancy_migration.sql');
+    const multitenancySchema = readFileSync(multitenancyPath, 'utf-8');
+    await client.query(multitenancySchema);
+    console.log('✅ Multitenancy migration completed');
+
+    console.log('🎉 All database migrations completed successfully!');
   } catch (error) {
-    console.error('Migration failed:', error);
+    console.error('❌ Migration failed:', error);
     throw error;
   } finally {
     client.release();

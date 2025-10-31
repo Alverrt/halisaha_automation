@@ -39,31 +39,31 @@ class Database {
   }
 
   // Customer operations
-  async createCustomer(name: string, phoneNumber: string) {
+  async createCustomer(name: string, phoneNumber: string, tenantId: number) {
     const query = `
-      INSERT INTO customers (name, phone_number)
-      VALUES ($1, $2)
-      ON CONFLICT (phone_number)
+      INSERT INTO customers (name, phone_number, tenant_id)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (phone_number, tenant_id)
       DO UPDATE SET name = EXCLUDED.name
       RETURNING *
     `;
-    const result = await this.query(query, [name, phoneNumber]);
+    const result = await this.query(query, [name, phoneNumber, tenantId]);
     return result.rows[0];
   }
 
-  async getCustomerByPhone(phoneNumber: string) {
-    const query = 'SELECT * FROM customers WHERE phone_number = $1';
-    const result = await this.query(query, [phoneNumber]);
+  async getCustomerByPhone(phoneNumber: string, tenantId: number) {
+    const query = 'SELECT * FROM customers WHERE phone_number = $1 AND tenant_id = $2';
+    const result = await this.query(query, [phoneNumber, tenantId]);
     return result.rows[0];
   }
 
-  async getCustomerById(id: number) {
-    const query = 'SELECT * FROM customers WHERE id = $1';
-    const result = await this.query(query, [id]);
+  async getCustomerById(id: number, tenantId: number) {
+    const query = 'SELECT * FROM customers WHERE id = $1 AND tenant_id = $2';
+    const result = await this.query(query, [id, tenantId]);
     return result.rows[0];
   }
 
-  async updateCustomer(id: number, name?: string, phoneNumber?: string) {
+  async updateCustomer(id: number, tenantId: number, name?: string, phoneNumber?: string) {
     const updates: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
@@ -83,10 +83,11 @@ class Database {
     }
 
     params.push(id);
+    params.push(tenantId);
     const query = `
       UPDATE customers
       SET ${updates.join(', ')}
-      WHERE id = $${paramIndex}
+      WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
       RETURNING *
     `;
 
@@ -97,57 +98,60 @@ class Database {
   // Reservation operations
   async createReservation(
     customerId: number,
+    tenantId: number,
     startTime: Date,
     endTime: Date,
     price?: number,
     notes?: string
   ) {
     const query = `
-      INSERT INTO reservations (customer_id, start_time, end_time, price, notes, status)
-      VALUES ($1, $2, $3, $4, $5, 'active')
+      INSERT INTO reservations (customer_id, tenant_id, start_time, end_time, price, notes, status)
+      VALUES ($1, $2, $3, $4, $5, $6, 'active')
       RETURNING *
     `;
-    const result = await this.query(query, [customerId, startTime, endTime, price, notes]);
+    const result = await this.query(query, [customerId, tenantId, startTime, endTime, price, notes]);
     return result.rows[0];
   }
 
-  async getReservationsByDateRange(startDate: Date, endDate: Date) {
+  async getReservationsByDateRange(startDate: Date, endDate: Date, tenantId: number) {
     const query = `
       SELECT r.*, c.name as customer_name, c.phone_number
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
       WHERE r.start_time >= $1 AND r.end_time <= $2
+      AND r.tenant_id = $3
       AND r.status = 'active'
       ORDER BY r.start_time
     `;
-    const result = await this.query(query, [startDate, endDate]);
+    const result = await this.query(query, [startDate, endDate, tenantId]);
     return result.rows;
   }
 
-  async cancelReservation(id: number) {
+  async cancelReservation(id: number, tenantId: number) {
     const query = `
       UPDATE reservations
       SET status = 'cancelled'
-      WHERE id = $1
+      WHERE id = $1 AND tenant_id = $2
       RETURNING *
     `;
-    const result = await this.query(query, [id]);
+    const result = await this.query(query, [id, tenantId]);
     return result.rows[0];
   }
 
-  async getReservationById(id: number) {
+  async getReservationById(id: number, tenantId: number) {
     const query = `
       SELECT r.*, c.name as customer_name, c.phone_number
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
-      WHERE r.id = $1
+      WHERE r.id = $1 AND r.tenant_id = $2
     `;
-    const result = await this.query(query, [id]);
+    const result = await this.query(query, [id, tenantId]);
     return result.rows[0];
   }
 
   async updateReservation(
     id: number,
+    tenantId: number,
     startTime?: Date,
     endTime?: Date,
     price?: number,
@@ -182,10 +186,11 @@ class Database {
     }
 
     params.push(id);
+    params.push(tenantId);
     const query = `
       UPDATE reservations
       SET ${updates.join(', ')}
-      WHERE id = $${paramIndex}
+      WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
       RETURNING *
     `;
 
@@ -194,7 +199,7 @@ class Database {
   }
 
   // Analytics operations
-  async getTotalHoursSold(startDate: Date, endDate: Date) {
+  async getTotalHoursSold(startDate: Date, endDate: Date, tenantId: number) {
     const query = `
       SELECT
         COUNT(*) as total_reservations,
@@ -203,13 +208,14 @@ class Database {
       FROM reservations
       WHERE start_time >= $1
       AND end_time <= $2
+      AND tenant_id = $3
       AND status IN ('active', 'completed')
     `;
-    const result = await this.query(query, [startDate, endDate]);
+    const result = await this.query(query, [startDate, endDate, tenantId]);
     return result.rows[0];
   }
 
-  async getMostLoyalCustomers(limit: number = 10, startDate?: Date, endDate?: Date) {
+  async getMostLoyalCustomers(tenantId: number, limit: number = 10, startDate?: Date, endDate?: Date) {
     const query = startDate && endDate ? `
       SELECT
         c.id,
@@ -220,10 +226,11 @@ class Database {
       FROM customers c
       JOIN reservations r ON c.id = r.customer_id
       WHERE r.status IN ('active', 'completed')
-      AND r.start_time >= $1 AND r.end_time <= $2
+      AND r.tenant_id = $1
+      AND r.start_time >= $2 AND r.end_time <= $3
       GROUP BY c.id
       ORDER BY reservation_count DESC, total_spent DESC
-      LIMIT $3
+      LIMIT $4
     ` : `
       SELECT
         c.id,
@@ -234,17 +241,18 @@ class Database {
       FROM customers c
       JOIN reservations r ON c.id = r.customer_id
       WHERE r.status IN ('active', 'completed')
+      AND r.tenant_id = $1
       GROUP BY c.id
       ORDER BY reservation_count DESC, total_spent DESC
-      LIMIT $1
+      LIMIT $2
     `;
 
-    const params = startDate && endDate ? [startDate, endDate, limit] : [limit];
+    const params = startDate && endDate ? [tenantId, startDate, endDate, limit] : [tenantId, limit];
     const result = await this.query(query, params);
     return result.rows;
   }
 
-  async getCustomersWithMostCancellations(limit: number = 10) {
+  async getCustomersWithMostCancellations(tenantId: number, limit: number = 10) {
     const query = `
       SELECT
         c.id,
@@ -254,15 +262,16 @@ class Database {
       FROM customers c
       JOIN reservations r ON c.id = r.customer_id
       WHERE r.status = 'cancelled'
+      AND r.tenant_id = $1
       GROUP BY c.id
       ORDER BY cancellation_count DESC
-      LIMIT $1
+      LIMIT $2
     `;
-    const result = await this.query(query, [limit]);
+    const result = await this.query(query, [tenantId, limit]);
     return result.rows;
   }
 
-  async getPeakHours(startDate: Date, endDate: Date) {
+  async getPeakHours(startDate: Date, endDate: Date, tenantId: number) {
     const query = `
       SELECT
         EXTRACT(HOUR FROM start_time) as hour,
@@ -270,11 +279,12 @@ class Database {
       FROM reservations
       WHERE start_time >= $1
       AND end_time <= $2
+      AND tenant_id = $3
       AND status IN ('active', 'completed')
       GROUP BY hour
       ORDER BY reservation_count DESC
     `;
-    const result = await this.query(query, [startDate, endDate]);
+    const result = await this.query(query, [startDate, endDate, tenantId]);
     return result.rows;
   }
 
@@ -286,11 +296,12 @@ class Database {
     promptTokens: number | null,
     completionTokens: number | null,
     totalTokens: number,
+    tenantId?: number,
     requestType?: string
   ) {
     const query = `
-      INSERT INTO token_usage (user_id, model, model_type, prompt_tokens, completion_tokens, total_tokens, request_type)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO token_usage (user_id, model, model_type, prompt_tokens, completion_tokens, total_tokens, tenant_id, request_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `;
     const result = await this.query(query, [
@@ -300,6 +311,7 @@ class Database {
       promptTokens,
       completionTokens,
       totalTokens,
+      tenantId || null,
       requestType || null,
     ]);
     return result.rows[0];
@@ -406,18 +418,25 @@ class Database {
   }
 
   // Conversation history operations (in-memory for now, can be moved to DB later)
+  // Tenant-scoped conversation history: key format is "tenantId:userId"
   private conversationHistory: Map<string, any[]> = new Map();
   private readonly MAX_HISTORY_MESSAGES = 10; // Keep last 10 messages per user (reduced from 20)
   private readonly HISTORY_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes (reduced from 30)
   private lastActivityTime: Map<string, number> = new Map();
 
-  getConversationHistory(userId: string): any[] {
-    this.cleanExpiredHistory(userId);
-    return this.conversationHistory.get(userId) || [];
+  private getTenantKey(tenantId: number, userId: string): string {
+    return `${tenantId}:${userId}`;
   }
 
-  setConversationHistory(userId: string, messages: any[]) {
-    this.cleanExpiredHistory(userId);
+  getConversationHistory(tenantId: number, userId: string): any[] {
+    const key = this.getTenantKey(tenantId, userId);
+    this.cleanExpiredHistory(key);
+    return this.conversationHistory.get(key) || [];
+  }
+
+  setConversationHistory(tenantId: number, userId: string, messages: any[]) {
+    const key = this.getTenantKey(tenantId, userId);
+    this.cleanExpiredHistory(key);
 
     // Optimize: Remove intermediate tool calls/responses, keep only final user/assistant exchanges
     const optimizedMessages = this.optimizeMessages(messages);
@@ -429,14 +448,14 @@ class Database {
     if (otherMessages.length > this.MAX_HISTORY_MESSAGES) {
       const trimmedMessages = otherMessages.slice(-this.MAX_HISTORY_MESSAGES);
       this.conversationHistory.set(
-        userId,
+        key,
         systemMessage ? [systemMessage, ...trimmedMessages] : trimmedMessages
       );
     } else {
-      this.conversationHistory.set(userId, optimizedMessages);
+      this.conversationHistory.set(key, optimizedMessages);
     }
 
-    this.lastActivityTime.set(userId, Date.now());
+    this.lastActivityTime.set(key, Date.now());
   }
 
   private optimizeMessages(messages: any[]): any[] {
@@ -500,15 +519,17 @@ class Database {
     return optimized;
   }
 
-  clearConversationHistory(userId: string) {
-    this.conversationHistory.delete(userId);
-    this.lastActivityTime.delete(userId);
+  clearConversationHistory(tenantId: number, userId: string) {
+    const key = this.getTenantKey(tenantId, userId);
+    this.conversationHistory.delete(key);
+    this.lastActivityTime.delete(key);
   }
 
-  private cleanExpiredHistory(userId: string) {
-    const lastActivity = this.lastActivityTime.get(userId);
+  private cleanExpiredHistory(key: string) {
+    const lastActivity = this.lastActivityTime.get(key);
     if (lastActivity && Date.now() - lastActivity > this.HISTORY_EXPIRY_MS) {
-      this.clearConversationHistory(userId);
+      this.conversationHistory.delete(key);
+      this.lastActivityTime.delete(key);
     }
   }
 }
