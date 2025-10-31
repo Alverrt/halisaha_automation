@@ -218,6 +218,13 @@ KURALLAR:
 - Tarih/saat sorularında get_current_time kullan
 - "bugün", "yarın" için get_current_time çağır
 
+SORGULAMA:
+- "kim var o saatte", "cumartesi 6-7 kimde" gibi sorularda:
+  * list_week_reservations ile haftanın tüm rezervasyonlarını al
+  * Liste içinden ilgili gün/saati kendin bul ve kullanıcıya söyle
+  * ASLA "bilgi öğrenemiyorum" deme, listeyi kullan!
+- "dolu mu", "boş mu" sorularında da aynı yöntemi kullan
+
 SAAT:
 - "9-10" → akşam 21:00-22:00
 - "sabah 9-10" → sabah 09:00-10:00
