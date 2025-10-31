@@ -116,7 +116,7 @@ app.post('/webhook', async (req: Request, res: Response) => {
 
                 // Get Field Agent response for the text (either from text message or transcribed audio)
                 if (messageText && messageText.trim() !== '') {
-                  const agentResponse = await fieldAgent.processMessage(from, messageText);
+                  const agentResponse = await fieldAgent.processMessage(from, messageText, tenantId);
                   await whatsappClient.sendMessage(from, agentResponse);
                 }
               }

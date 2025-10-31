@@ -24,20 +24,21 @@ export interface ReservationDetails {
 }
 
 class ReservationService {
-  async createReservation(input: ReservationInput): Promise<ReservationDetails> {
+  async createReservation(input: ReservationInput, tenantId: number): Promise<ReservationDetails> {
     // Get or create customer
-    let customer = await db.getCustomerByPhone(input.customerPhone);
+    let customer = await db.getCustomerByPhone(input.customerPhone, tenantId);
 
     if (!customer) {
-      customer = await db.createCustomer(input.customerName, input.customerPhone);
+      customer = await db.createCustomer(input.customerName, input.customerPhone, tenantId);
     } else if (customer.name !== input.customerName) {
       // Update customer name if different
-      customer = await db.createCustomer(input.customerName, input.customerPhone);
+      customer = await db.createCustomer(input.customerName, input.customerPhone, tenantId);
     }
 
     // Create reservation
     const reservation = await db.createReservation(
       customer.id,
+      tenantId,
       input.startTime,
       input.endTime,
       input.price,
@@ -54,7 +55,7 @@ class ReservationService {
     };
   }
 
-  async getReservationsByWeek(weekOffset: number = 0): Promise<ReservationDetails[]> {
+  async getReservationsByWeek(weekOffset: number = 0, tenantId: number = 1): Promise<ReservationDetails[]> {
     const { startDate, endDate } = this.getWeekRange(weekOffset);
 
     const cacheKey = cacheService.getWeekTableCacheKey(weekOffset);
@@ -64,7 +65,7 @@ class ReservationService {
       return cached;
     }
 
-    const reservations = await db.getReservationsByDateRange(startDate, endDate);
+    const reservations = await db.getReservationsByDateRange(startDate, endDate, tenantId);
 
     // Cache for 5 minutes
     await cacheService.set(cacheKey, reservations, 300);
@@ -72,7 +73,7 @@ class ReservationService {
     return reservations;
   }
 
-  async findReservationsByCustomerName(customerName: string): Promise<ReservationDetails[]> {
+  async findReservationsByCustomerName(customerName: string, tenantId: number = 1): Promise<ReservationDetails[]> {
     // Search for active reservations by customer name (case-insensitive, partial match)
     // Include all active reservations (past and future) to allow finding any active reservation
     const query = `
@@ -80,16 +81,17 @@ class ReservationService {
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
       WHERE LOWER(c.name) LIKE LOWER($1)
+      AND r.tenant_id = $2
       AND r.status = 'active'
       ORDER BY r.start_time DESC
     `;
 
-    const result = await db.query(query, [`%${customerName}%`]);
+    const result = await db.query(query, [`%${customerName}%`, tenantId]);
     return result.rows;
   }
 
-  async cancelReservation(reservationId: number): Promise<ReservationDetails> {
-    const reservation = await db.getReservationById(reservationId);
+  async cancelReservation(reservationId: number, tenantId: number = 1): Promise<ReservationDetails> {
+    const reservation = await db.getReservationById(reservationId, tenantId);
 
     if (!reservation) {
       throw new Error('Rezervasyon bulunamadı');
@@ -99,7 +101,7 @@ class ReservationService {
       throw new Error('Bu rezervasyon zaten iptal edilmiş');
     }
 
-    await db.cancelReservation(reservationId);
+    await db.cancelReservation(reservationId, tenantId);
 
     // Invalidate cache
     await this.invalidateWeekCache(new Date(reservation.start_time));
@@ -107,9 +109,9 @@ class ReservationService {
     return reservation;
   }
 
-  async cancelAllWeekReservations(weekOffset: number = 0): Promise<{ cancelled: number; reservations: ReservationDetails[] }> {
+  async cancelAllWeekReservations(weekOffset: number = 0, tenantId: number = 1): Promise<{ cancelled: number; reservations: ReservationDetails[] }> {
     // Get all active reservations for the week
-    const reservations = await this.getReservationsByWeek(weekOffset);
+    const reservations = await this.getReservationsByWeek(weekOffset, tenantId);
 
     if (reservations.length === 0) {
       return { cancelled: 0, reservations: [] };
@@ -118,7 +120,7 @@ class ReservationService {
     // Cancel each reservation
     const cancelledReservations: ReservationDetails[] = [];
     for (const reservation of reservations) {
-      await db.cancelReservation(reservation.id);
+      await db.cancelReservation(reservation.id, tenantId);
       cancelledReservations.push(reservation);
     }
 
@@ -133,7 +135,8 @@ class ReservationService {
     customerPhone: string,
     startTime: Date,
     endTime: Date,
-    excludeReservationId?: number
+    excludeReservationId?: number,
+    tenantId: number = 1
   ): Promise<boolean> {
     // Check if customer already has a reservation at the same time
     let query = `
@@ -141,14 +144,15 @@ class ReservationService {
       FROM reservations r
       JOIN customers c ON r.customer_id = c.id
       WHERE c.phone_number = $1
+      AND r.tenant_id = $2
       AND r.status = 'active'
-      AND tsrange($2::timestamp, $3::timestamp) && tsrange(r.start_time, r.end_time)
+      AND tsrange($3::timestamp, $4::timestamp) && tsrange(r.start_time, r.end_time)
     `;
 
-    const params: any[] = [customerPhone, startTime, endTime];
+    const params: any[] = [customerPhone, tenantId, startTime, endTime];
 
     if (excludeReservationId) {
-      query += ' AND r.id != $4';
+      query += ' AND r.id != $5';
       params.push(excludeReservationId);
     }
 
@@ -159,9 +163,10 @@ class ReservationService {
   async updateCustomerInfo(
     reservationId: number,
     newName?: string,
-    newPhone?: string
+    newPhone?: string,
+    tenantId: number = 1
   ): Promise<ReservationDetails> {
-    const reservation = await db.getReservationById(reservationId);
+    const reservation = await db.getReservationById(reservationId, tenantId);
 
     if (!reservation) {
       throw new Error('Rezervasyon bulunamadı');
@@ -172,22 +177,23 @@ class ReservationService {
     }
 
     // Update customer info
-    await db.updateCustomer(reservation.customer_id, newName, newPhone);
+    await db.updateCustomer(reservation.customer_id, tenantId, newName, newPhone);
 
     // Invalidate cache
     await this.invalidateWeekCache(new Date(reservation.start_time));
 
     // Return updated reservation
-    return await db.getReservationById(reservationId);
+    return await db.getReservationById(reservationId, tenantId);
   }
 
   async updateReservationTime(
     reservationId: number,
     newStartTime?: Date,
     newEndTime?: Date,
-    newPrice?: number
+    newPrice?: number,
+    tenantId: number = 1
   ): Promise<ReservationDetails> {
-    const reservation = await db.getReservationById(reservationId);
+    const reservation = await db.getReservationById(reservationId, tenantId);
 
     if (!reservation) {
       throw new Error('Rezervasyon bulunamadı');
@@ -212,7 +218,7 @@ class ReservationService {
     }
 
     // Update reservation
-    await db.updateReservation(reservationId, newStartTime, newEndTime, newPrice);
+    await db.updateReservation(reservationId, tenantId, newStartTime, newEndTime, newPrice);
 
     // Invalidate cache for both old and new dates
     await this.invalidateWeekCache(new Date(reservation.start_time));
@@ -221,7 +227,7 @@ class ReservationService {
     }
 
     // Return updated reservation
-    return await db.getReservationById(reservationId);
+    return await db.getReservationById(reservationId, tenantId);
   }
 
   private getWeekRange(weekOffset: number = 0): { startDate: Date; endDate: Date } {

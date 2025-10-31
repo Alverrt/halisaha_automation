@@ -2,7 +2,7 @@ import { Pool, QueryResult } from 'pg';
 import { config } from '../config';
 
 class Database {
-  private pool: Pool;
+  public pool: Pool;
 
   constructor() {
     this.pool = new Pool({
@@ -535,3 +535,6 @@ class Database {
 }
 
 export const db = new Database();
+
+// Export pool for direct queries (used by tenant service)
+export const pool = db.pool;

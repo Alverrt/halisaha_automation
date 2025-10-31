@@ -177,16 +177,16 @@ export class FieldAgent {
     this.toolRouter = new ToolRouter(this.llmProvider, this.tools);
   }
 
-  async processMessage(userId: string, message: string): Promise<string> {
+  async processMessage(userId: string, message: string, tenantId: number = 1): Promise<string> {
     try {
       // Handle special commands
       if (message.trim().toLowerCase() === '/yenile' || message.trim().toLowerCase() === '/reset') {
-        db.clearConversationHistory(userId);
+        db.clearConversationHistory(tenantId, userId);
         return '✅ Konuşma geçmişi temizlendi. Yeni bir konuşma başlayabilirsiniz.';
       }
 
       // Get conversation history for this user
-      const history = db.getConversationHistory(userId);
+      const history = db.getConversationHistory(tenantId, userId);
 
       if (process.env.NODE_ENV === 'development') {
         console.log(`\n=== Processing message for user ${userId} ===`);
@@ -269,6 +269,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
           response.usage.prompt_tokens,
           response.usage.completion_tokens,
           response.usage.total_tokens,
+          tenantId,
           'chat_completion'
         ).catch(err => console.error('Failed to log token usage:', err));
       }
@@ -298,7 +299,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
 
             console.log(`Executing function: ${functionName}`, functionArgs);
 
-            const functionResult = await this.executeFunction(functionName, functionArgs, userId);
+            const functionResult = await this.executeFunction(functionName, functionArgs, userId, tenantId);
 
             messages.push({
               role: 'tool',
@@ -324,6 +325,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
             response.usage.prompt_tokens,
             response.usage.completion_tokens,
             response.usage.total_tokens,
+            tenantId,
             'tool_call_iteration'
           ).catch(err => console.error('Failed to log token usage:', err));
         }
@@ -344,7 +346,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
       }
 
       // Save updated conversation history
-      db.setConversationHistory(userId, messages);
+      db.setConversationHistory(tenantId, userId, messages);
 
       // Add token usage info in development
       if (process.env.NODE_ENV !== 'production') {
@@ -358,7 +360,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
     }
   }
 
-  private async executeFunction(functionName: string, args: any, userId: string): Promise<string> {
+  private async executeFunction(functionName: string, args: any, userId: string, tenantId: number): Promise<string> {
     try {
       // Strip namespace prefix if present (e.g., "default_api.function_name" -> "function_name")
       const cleanFunctionName = functionName.includes('.') ? functionName.split('.').pop()! : functionName;
@@ -409,7 +411,7 @@ Türkçe konuş, profesyonel+samimi ol.`,
             endTime,
             price: args.price,
             notes: args.notes,
-          });
+          }, tenantId);
 
           return `✅ Rezervasyon oluşturuldu!\n\n` +
             `👤 Müşteri: ${reservation.customer_name}\n` +

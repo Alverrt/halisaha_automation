@@ -34,7 +34,7 @@ class AnalyticsService {
       return cached;
     }
 
-    const result = await db.getTotalHoursSold(startDate, endDate);
+    const result = await db.getTotalHoursSold(startDate, endDate, 1); // TODO: Pass tenantId
 
     const analytics: SalesAnalytics = {
       total_reservations: parseInt(result.total_reservations) || 0,
@@ -82,7 +82,7 @@ class AnalyticsService {
       return cached;
     }
 
-    const customers = await db.getMostLoyalCustomers(limit, startDate, endDate);
+    const customers = await db.getMostLoyalCustomers(1, limit, startDate, endDate); // TODO: Pass tenantId
 
     // Cache for 15 minutes
     await cacheService.set(cacheKey, customers, 900);
@@ -118,7 +118,7 @@ class AnalyticsService {
       return cached;
     }
 
-    const peakHours = await db.getPeakHours(startDate, endDate);
+    const peakHours = await db.getPeakHours(startDate, endDate, 1); // TODO: Pass tenantId
 
     // Cache for 30 minutes
     await cacheService.set(cacheKey, peakHours, 1800);
