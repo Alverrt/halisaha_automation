@@ -25,6 +25,8 @@ class TableVisualizationService {
     const width = this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * 7;
     const height = this.HEADER_HEIGHT + this.CELL_HEIGHT * this.HOURS.length;
 
+    console.log(`\n🎨 Generating table: ${width}x${height}px, ${reservations.length} reservations`);
+
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
@@ -129,25 +131,40 @@ class TableVisualizationService {
     reservations: ReservationDetails[],
     weekStartDate: Date
   ): void {
-    reservations.forEach((reservation) => {
+    console.log(`📝 Filling ${reservations.length} reservations...`);
+
+    reservations.forEach((reservation, idx) => {
       const startTime = new Date(reservation.start_time);
       const endTime = new Date(reservation.end_time);
+
+      console.log(`  ${idx + 1}. ${reservation.customer_name} - ${startTime.toLocaleString('tr-TR')} to ${endTime.toLocaleString('tr-TR')}`);
 
       // Calculate day offset from week start
       const dayDiff = Math.floor(
         (startTime.getTime() - weekStartDate.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      if (dayDiff < 0 || dayDiff >= 7) return;
+      console.log(`     Day offset: ${dayDiff} (week start: ${weekStartDate.toLocaleDateString('tr-TR')})`);
+
+      if (dayDiff < 0 || dayDiff >= 7) {
+        console.log(`     ⚠️  Skipped - outside week range`);
+        return;
+      }
 
       const startHour = startTime.getHours();
       const endHour = endTime.getHours();
 
+      console.log(`     Hours: ${startHour}:00 - ${endHour}:00`);
+
       // Find hour index
       const startIndex = this.HOURS.indexOf(startHour);
-      if (startIndex === -1) return;
+      if (startIndex === -1) {
+        console.log(`     ⚠️  Skipped - hour ${startHour} not in range (12-6)`);
+        return;
+      }
 
       const hourSpan = endHour - startHour;
+      console.log(`     ✅ Drawing at position [day=${dayDiff}, hour=${startHour}, span=${hourSpan}]`);
 
       // Draw reservation cell
       const x = this.TIME_COLUMN_WIDTH + this.CELL_WIDTH * dayDiff;

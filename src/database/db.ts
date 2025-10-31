@@ -404,6 +404,113 @@ class Database {
     const result = await this.query(query, params);
     return result.rows[0];
   }
+
+  // Conversation history operations (in-memory for now, can be moved to DB later)
+  private conversationHistory: Map<string, any[]> = new Map();
+  private readonly MAX_HISTORY_MESSAGES = 10; // Keep last 10 messages per user (reduced from 20)
+  private readonly HISTORY_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes (reduced from 30)
+  private lastActivityTime: Map<string, number> = new Map();
+
+  getConversationHistory(userId: string): any[] {
+    this.cleanExpiredHistory(userId);
+    return this.conversationHistory.get(userId) || [];
+  }
+
+  setConversationHistory(userId: string, messages: any[]) {
+    this.cleanExpiredHistory(userId);
+
+    // Optimize: Remove intermediate tool calls/responses, keep only final user/assistant exchanges
+    const optimizedMessages = this.optimizeMessages(messages);
+
+    // Keep only the last N messages (excluding system message)
+    const systemMessage = optimizedMessages.find(m => m.role === 'system');
+    const otherMessages = optimizedMessages.filter(m => m.role !== 'system');
+
+    if (otherMessages.length > this.MAX_HISTORY_MESSAGES) {
+      const trimmedMessages = otherMessages.slice(-this.MAX_HISTORY_MESSAGES);
+      this.conversationHistory.set(
+        userId,
+        systemMessage ? [systemMessage, ...trimmedMessages] : trimmedMessages
+      );
+    } else {
+      this.conversationHistory.set(userId, optimizedMessages);
+    }
+
+    this.lastActivityTime.set(userId, Date.now());
+  }
+
+  private optimizeMessages(messages: any[]): any[] {
+    const optimized: any[] = [];
+    let i = 0;
+
+    while (i < messages.length) {
+      const msg = messages[i];
+
+      // Always keep system messages
+      if (msg.role === 'system') {
+        optimized.push(msg);
+        i++;
+        continue;
+      }
+
+      // Always keep user messages
+      if (msg.role === 'user') {
+        optimized.push(msg);
+        i++;
+        continue;
+      }
+
+      // For assistant messages, check if they're followed by tool calls
+      if (msg.role === 'assistant') {
+        // If assistant message has content (not just tool calls), keep it
+        if (msg.content && msg.content.trim()) {
+          optimized.push(msg);
+          i++;
+          continue;
+        }
+
+        // If it has tool calls, skip the entire tool call sequence and keep only the final response
+        if (msg.tool_calls) {
+          // Skip this assistant message with tool calls
+          i++;
+
+          // Skip all tool responses
+          while (i < messages.length && messages[i].role === 'tool') {
+            i++;
+          }
+
+          // The next message should be the assistant's final response - keep that
+          if (i < messages.length && messages[i].role === 'assistant') {
+            optimized.push(messages[i]);
+            i++;
+          }
+          continue;
+        }
+
+        // Regular assistant message without tool calls
+        optimized.push(msg);
+        i++;
+        continue;
+      }
+
+      // Skip standalone tool messages (shouldn't happen with above logic)
+      i++;
+    }
+
+    return optimized;
+  }
+
+  clearConversationHistory(userId: string) {
+    this.conversationHistory.delete(userId);
+    this.lastActivityTime.delete(userId);
+  }
+
+  private cleanExpiredHistory(userId: string) {
+    const lastActivity = this.lastActivityTime.get(userId);
+    if (lastActivity && Date.now() - lastActivity > this.HISTORY_EXPIRY_MS) {
+      this.clearConversationHistory(userId);
+    }
+  }
 }
 
 export const db = new Database();
